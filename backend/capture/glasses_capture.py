@@ -32,10 +32,15 @@ class GlassesCapture:
     def __init__(self, host: str = "0.0.0.0", port: int = 8765, max_queue: int = 5) -> None:
         self.host = host
         self.port = port
-        self._frame_queue: Queue[np.ndarray] = Queue(maxsize=max_queue)
+        self._jpeg_queue: Queue[bytes] = Queue(maxsize=max_queue)
         self._running = False
         self._server_thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        # Raw JPEG bytes from iOS — served directly to MJPEG stream (no re-encoding)
+        self._latest_jpeg: bytes | None = None
+        self._jpeg_lock = threading.Lock()
+        self._new_frame_event = threading.Event()
+        self.jpeg_id: int = 0
 
     def _start_server(self) -> None:
         """Run the WebSocket server in a background thread."""
@@ -56,24 +61,38 @@ class GlassesCapture:
                 if not self._running:
                     break
                 if isinstance(message, bytes):
-                    # Decode JPEG bytes → BGR numpy array
-                    arr = np.frombuffer(message, dtype=np.uint8)
-                    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                    if frame is not None:
-                        # Drop oldest frame if queue is full (keep latest)
-                        if self._frame_queue.full():
-                            try:
-                                self._frame_queue.get_nowait()
-                            except Empty:
-                                pass
-                        self._frame_queue.put(frame)
+                    # Store raw JPEG for the MJPEG stream (zero CPU work)
+                    with self._jpeg_lock:
+                        self._latest_jpeg = message
+                        self.jpeg_id += 1
+                    self._new_frame_event.set()
+                    # Queue raw JPEG bytes — decoding happens on the consumer thread
+                    if self._jpeg_queue.full():
+                        try:
+                            self._jpeg_queue.get_nowait()
+                        except Empty:
+                            pass
+                    self._jpeg_queue.put(message)
         except websockets.exceptions.ConnectionClosed:
             print("[GlassesCapture] iOS app disconnected.")
+
+    def get_latest_jpeg(self) -> bytes | None:
+        """Return raw JPEG bytes from the iOS app (no re-encoding needed)."""
+        with self._jpeg_lock:
+            return self._latest_jpeg
+
+    def wait_for_frame(self, timeout: float = 0.1) -> bool:
+        """Block until a new frame arrives. Returns True if a frame is ready."""
+        result = self._new_frame_event.wait(timeout=timeout)
+        self._new_frame_event.clear()
+        return result
 
     def grab_once(self) -> np.ndarray | None:
         """Grab a single frame from the queue (non-blocking)."""
         try:
-            return self._frame_queue.get_nowait()
+            jpeg_bytes = self._jpeg_queue.get_nowait()
+            arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+            return cv2.imdecode(arr, cv2.IMREAD_COLOR)
         except Empty:
             return None
 
@@ -81,7 +100,7 @@ class GlassesCapture:
         """
         Generator that yields BGR frames as they arrive from the glasses.
         Same interface as FrameCapture.frames().
-        Call stop() from another thread to end the loop.
+        Decodes JPEG → numpy here (on the consumer thread, not the async handler).
         """
         self._running = True
         self._server_thread = threading.Thread(target=self._start_server, daemon=True)
@@ -89,8 +108,11 @@ class GlassesCapture:
 
         while self._running:
             try:
-                frame = self._frame_queue.get(timeout=0.5)
-                yield frame
+                jpeg_bytes = self._jpeg_queue.get(timeout=0.5)
+                arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if frame is not None:
+                    yield frame
             except Empty:
                 continue
 

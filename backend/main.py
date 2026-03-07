@@ -183,15 +183,16 @@ async def trigger_montage(person_id: str):
 # ─── Live Stream ─────────────────────────────────────────────────────────
 
 def _mjpeg_generator():
-    """Yield MJPEG frames for the browser live view."""
+    """Yield MJPEG frames the instant they arrive — no polling delay."""
     while orchestrator and orchestrator.is_running:
+        # Block until a new frame arrives (up to 100ms timeout)
+        orchestrator.wait_for_frame(timeout=0.1)
         jpeg = orchestrator.get_latest_jpeg()
         if jpeg:
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
             )
-        time.sleep(0.5)  # ~2 FPS to match pipeline rate
 
 
 @app.get("/api/stream")
@@ -206,6 +207,27 @@ async def live_stream():
 
 
 # ─── WebSocket ────────────────────────────────────────────────────────────────
+
+@app.websocket("/ws/stream")
+async def ws_stream(ws: WebSocket):
+    """Push raw JPEG frames over WebSocket for smooth canvas rendering."""
+    await ws.accept()
+    last_frame_id = 0
+    try:
+        while True:
+            if orchestrator and orchestrator.is_running:
+                current_id = orchestrator.stream_frame_id
+                if current_id > last_frame_id:
+                    jpeg = orchestrator.get_latest_jpeg()
+                    if jpeg:
+                        await ws.send_bytes(jpeg)
+                    last_frame_id = current_id
+                await asyncio.sleep(0.005)
+            else:
+                await asyncio.sleep(0.1)  # wait for capture to start
+    except WebSocketDisconnect:
+        pass
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
