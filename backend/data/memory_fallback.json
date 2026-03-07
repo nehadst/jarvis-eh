@@ -9,6 +9,11 @@
       "timestamp": 45.0,
       "activity": "watching tv",
       "message": "That's what you were doing. Let's get back to it."
+    },
+    {
+      "timestamp": 45.0,
+      "activity": "watching tv",
+      "message": "That's what you were doing. Let's get back to it."
     }
   ]
 }

@@ -22,7 +22,7 @@ from features.wandering_guardian.guardian import WanderingGuardian
 
 
 class Orchestrator:
-    def __init__(self, event_callback: Callable[[dict], None] | None = None) -> None:
+    def __init__(self, event_callback: Callable[[dict], None] | None = None, capture=None) -> None:
         self.event_callback = event_callback or (lambda e: None)
         self.is_running = False
         self.active_task: str | None = None
@@ -33,7 +33,7 @@ class Orchestrator:
         self.tracker = ActivityTracker(on_event=self.event_callback)
         self.guardian = WanderingGuardian(on_event=self.event_callback)
 
-        self._capture = FrameCapture()
+        self._capture = capture if capture is not None else FrameCapture()
 
     # ── Public API ────────────────────────────────────────────────────────────
 
