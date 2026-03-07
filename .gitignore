@@ -22,6 +22,7 @@ deepface_test/face_db/
 deepface_test/frames/
 backend/data/face_db/
 backend/data/frames/
+backend/data/test_videos/
 # Keep the directory structure
 !backend/data/face_db/.gitkeep
 !backend/data/family_profiles/
