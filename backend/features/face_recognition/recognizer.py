@@ -17,6 +17,7 @@ Each subfolder name must match the person's id field in their profile JSON.
 
 import json
 import os
+import threading
 import time
 import tempfile
 from pathlib import Path
@@ -37,6 +38,9 @@ class FaceRecognizer:
         self.on_event = on_event or (lambda e: None)
         self._last_identified: dict[str, float] = {}  # person_id → last timestamp
         self._profiles: dict[str, dict] = self._load_profiles()
+
+        # Lazy-import to avoid circular deps; builder is created once on first use
+        self._montage_builder = None
 
     # ── Public ────────────────────────────────────────────────────────────────
 
@@ -145,6 +149,36 @@ class FaceRecognizer:
             "confidence": round(1 - distance, 3),
             "whisper": whisper_text,
         })
+
+        # Trigger a memory montage in the background (non-blocking)
+        # The builder has its own cooldown so rapid re-recognitions are no-ops.
+        threading.Thread(
+            target=self._trigger_montage,
+            args=(person_id,),
+            daemon=True,
+        ).start()
+
+    def _trigger_montage(self, person_id: str) -> None:
+        """
+        Runs in a daemon thread. Builds the memory montage and fires a
+        montage_ready event through on_event (which broadcasts to the dashboard).
+        """
+        try:
+            builder = self._get_montage_builder()
+            if builder:
+                builder.build(person_id, force=False)
+        except Exception as e:
+            print(f"[FaceRecognizer] Montage build error for '{person_id}': {e}")
+
+    def _get_montage_builder(self):
+        """Lazily initialise MontageBuilder to avoid circular imports at module load."""
+        if self._montage_builder is None:
+            try:
+                from features.memory_montage.builder import MontageBuilder
+                self._montage_builder = MontageBuilder(on_event=self.on_event)
+            except Exception as e:
+                print(f"[FaceRecognizer] Could not initialise MontageBuilder: {e}")
+        return self._montage_builder
 
     def _face_is_present(self, frame: np.ndarray) -> bool:
         """Fast check using OpenCV haar cascade before running DeepFace."""
