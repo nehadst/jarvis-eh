@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { addTask, fetchFamily, triggerMontage } from "../api/client.js";
+import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding } from "../api/client.js";
 
 const styles = {
   panel: {
@@ -69,6 +69,30 @@ const styles = {
     fontWeight: 600,
     fontSize: 14,
   },
+  input: {
+    width: "100%",
+    background: "#1a1a24",
+    border: "1px solid #2d2d3d",
+    borderRadius: 8,
+    color: "#e8e8f0",
+    padding: "10px 12px",
+    fontSize: 14,
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+    marginBottom: 8,
+  },
+  btnGreen: {
+    width: "100%",
+    padding: "10px",
+    background: "#15803d",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: 14,
+  },
+  success: { fontSize: 13, color: "#34d399", marginTop: 4 },
   sending: { fontSize: 13, color: "#60a5fa", marginTop: 4 },
   tip: { fontSize: 12, color: "#4b5563", lineHeight: 1.5 },
 };
@@ -76,6 +100,14 @@ const styles = {
 export default function TaskPanel() {
   const [task, setTask] = useState("");
   const [sent, setSent] = useState(false);
+
+  // Household context state
+  const [whoIsHome, setWhoIsHome] = useState("");
+  const [householdSaved, setHouseholdSaved] = useState(false);
+
+  // Manual grounding state
+  const [grounding, setGrounding] = useState(false);
+  const [groundingTriggered, setGroundingTriggered] = useState(false);
 
   // Montage trigger state
   const [family, setFamily] = useState([]);
@@ -91,7 +123,27 @@ export default function TaskPanel() {
         if (data?.length) setSelectedPerson(data[0].id || data[0].person_id || "");
       })
       .catch(() => {});
+    getHousehold()
+      .then((data) => setWhoIsHome(data?.who_is_home || ""))
+      .catch(() => {});
   }, []);
+
+  const handleHousehold = async () => {
+    await setHousehold(whoIsHome.trim());
+    setHouseholdSaved(true);
+    setTimeout(() => setHouseholdSaved(false), 2000);
+  };
+
+  const handleGrounding = async () => {
+    setGrounding(true);
+    try {
+      await triggerGrounding();
+      setGroundingTriggered(true);
+      setTimeout(() => setGroundingTriggered(false), 2000);
+    } finally {
+      setGrounding(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!task.trim()) return;
@@ -114,6 +166,24 @@ export default function TaskPanel() {
 
   return (
     <div style={styles.panel}>
+      {/* Who is Home */}
+      <section>
+        <p style={styles.heading}>Who is Home</p>
+        <p style={{ ...styles.tip, marginBottom: 10 }}>
+          Names of people currently home. Used in grounding messages.
+        </p>
+        <input
+          style={styles.input}
+          type="text"
+          placeholder="e.g. David, Sarah"
+          value={whoIsHome}
+          onChange={(e) => setWhoIsHome(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleHousehold()}
+        />
+        <button style={styles.btn} onClick={handleHousehold}>Update</button>
+        {householdSaved && <p style={styles.success}>Saved!</p>}
+      </section>
+
       {/* Caregiver Task */}
       <section>
         <p style={styles.heading}>Set Patient Task</p>
@@ -131,6 +201,18 @@ export default function TaskPanel() {
           Send to Patient
         </button>
         {sent && <p style={styles.success}>Task sent!</p>}
+      </section>
+
+      {/* Ground Now */}
+      <section>
+        <p style={styles.heading}>Manual Grounding</p>
+        <p style={{ ...styles.tip, marginBottom: 10 }}>
+          Immediately play a grounding message for the patient.
+        </p>
+        <button style={styles.btnGreen} onClick={handleGrounding} disabled={grounding}>
+          {grounding ? "Triggering…" : "Ground Now"}
+        </button>
+        {groundingTriggered && <p style={styles.success}>Triggered!</p>}
       </section>
 
       {/* Memory Montage */}
