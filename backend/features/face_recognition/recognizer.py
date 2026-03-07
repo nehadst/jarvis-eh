@@ -23,6 +23,8 @@ On startup, all reference photos are embedded once and stored in memory.
 At runtime, only a single forward pass + vector comparison is needed.
 """
 
+from __future__ import annotations
+
 import json
 import threading
 import time

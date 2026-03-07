@@ -16,6 +16,8 @@ POC flow:
   4. Alert the dashboard
 """
 
+from __future__ import annotations
+
 import time
 from collections import deque
 from typing import Callable

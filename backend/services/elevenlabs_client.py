@@ -8,6 +8,8 @@ Usage:
     tts.speak("You're in your living room.", voice_id="different_voice_id")
 """
 
+from __future__ import annotations
+
 import io
 import threading
 import pygame

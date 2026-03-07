@@ -15,6 +15,8 @@ Also handles caregiver-set tasks:
   → grounding message includes the task reminder
 """
 
+from __future__ import annotations
+
 import time
 from collections import deque
 from datetime import datetime
