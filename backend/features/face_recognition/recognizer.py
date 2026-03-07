@@ -39,6 +39,11 @@ class FaceRecognizer:
         self._last_identified: dict[str, float] = {}  # person_id → last timestamp
         self._profiles: dict[str, dict] = self._load_profiles()
 
+        # Hoist CascadeClassifier construction out of the per-frame hot path
+        self._face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+
         # Lazy-import to avoid circular deps; builder is created once on first use
         self._montage_builder = None
 
@@ -183,8 +188,7 @@ class FaceRecognizer:
     def _face_is_present(self, frame: np.ndarray) -> bool:
         """Fast check using OpenCV haar cascade before running DeepFace."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+        faces = self._face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
         return len(faces) > 0
 
     def _load_profiles(self) -> dict[str, dict]:
