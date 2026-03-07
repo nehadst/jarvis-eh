@@ -50,11 +50,42 @@ const styles = {
 };
 
 export default function Dashboard({ events, connected, captureRunning, onStartCapture, onStopCapture }) {
-  const [montageEvent, setMontageEvent] = useState(null);
+  // ID (timestamp) of the event the user explicitly clicked "Play" on
+  const [pinnedId, setPinnedId] = useState(null);
+  // Set of timestamps the user has dismissed — prevents auto-pop from reopening them
+  const [dismissedIds, setDismissedIds] = useState(() => new Set());
 
-  // Show the player when a montage_ready event arrives
-  const latestMontage = events.findLast?.((e) => e.type === "montage_ready") ?? null;
-  const activeMontage = montageEvent ?? latestMontage;
+  // Use a plain loop instead of Array.findLast (not available in older browsers)
+  const latestMontage = (() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].type === "montage_ready") return events[i];
+    }
+    return null;
+  })();
+
+  // Pinned event takes priority; otherwise auto-show latest unless dismissed
+  const activeMontage = (() => {
+    if (pinnedId) {
+      return events.find((e) => e.type === "montage_ready" && e.timestamp === pinnedId) ?? null;
+    }
+    if (latestMontage && !dismissedIds.has(latestMontage.timestamp)) {
+      return latestMontage;
+    }
+    return null;
+  })();
+
+  const handlePlayMontage = (event) => {
+    // Un-dismiss this event in case the user previously closed it
+    setDismissedIds((prev) => { const next = new Set(prev); next.delete(event.timestamp); return next; });
+    setPinnedId(event.timestamp);
+  };
+
+  const handleClose = () => {
+    if (activeMontage) {
+      setDismissedIds((prev) => new Set([...prev, activeMontage.timestamp]));
+    }
+    setPinnedId(null);
+  };
 
   return (
     <div style={styles.root}>
@@ -73,11 +104,11 @@ export default function Dashboard({ events, connected, captureRunning, onStartCa
       </header>
 
       <div style={styles.body}>
-        <EventFeed events={events} onPlayMontage={setMontageEvent} />
+        <EventFeed events={events} onPlayMontage={handlePlayMontage} />
         <TaskPanel />
       </div>
 
-      <MontagePlayer event={activeMontage} onClose={() => setMontageEvent(null)} />
+      <MontagePlayer event={activeMontage} onClose={handleClose} />
     </div>
   );
 }
