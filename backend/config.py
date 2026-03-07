@@ -19,11 +19,18 @@ class Settings(BaseSettings):
     backboard_api_key: str = ""
     backboard_project_id: str = ""
 
-    # Screen capture (WhatsApp call window region)
+    # Capture source: "screen" (mss screen grab) or "glasses" (Meta glasses WebSocket)
+    capture_mode: str = "glasses"
+
+    # Screen capture region (only used when capture_mode="screen")
     capture_left: int = 0
     capture_top: int = 0
     capture_width: int = 1280
     capture_height: int = 720
+
+    # Meta glasses WebSocket (only used when capture_mode="glasses")
+    glasses_ws_host: str = "0.0.0.0"
+    glasses_ws_port: int = 8765
 
     # Face recognition
     face_db_path: str = "data/face_db"

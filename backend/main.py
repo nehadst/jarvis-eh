@@ -15,19 +15,22 @@ Endpoints:
   GET  /api/events                 — recent event log
   POST /api/capture/start          — start the live frame-capture loop
   POST /api/capture/stop           — stop the loop
-  POST /api/montage/{person_id}    — on-demand memory montage (optional ?tag=christmas)
+  GET  /api/stream                 — live MJPEG view of the glasses feed
+  POST /api/montage/{person_id}    — manually trigger a memory montage
   WS   /ws                         — real-time event stream to the dashboard
 """
 
 import asyncio
 import json
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from config import settings, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
@@ -235,7 +238,54 @@ async def trigger_montage(
     }
 
 
+# ─── Live Stream ─────────────────────────────────────────────────────────
+
+def _mjpeg_generator():
+    """Yield MJPEG frames the instant they arrive — no polling delay."""
+    while orchestrator and orchestrator.is_running:
+        # Block until a new frame arrives (up to 100ms timeout)
+        orchestrator.wait_for_frame(timeout=0.1)
+        jpeg = orchestrator.get_latest_jpeg()
+        if jpeg:
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+            )
+
+
+@app.get("/api/stream")
+async def live_stream():
+    """Open http://localhost:8000/api/stream in a browser to see the glasses feed."""
+    if not orchestrator or not orchestrator.is_running:
+        return {"error": "Capture not running. POST /api/capture/start first."}
+    return StreamingResponse(
+        _mjpeg_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
 # ─── WebSocket ────────────────────────────────────────────────────────────────
+
+@app.websocket("/ws/stream")
+async def ws_stream(ws: WebSocket):
+    """Push raw JPEG frames over WebSocket for smooth canvas rendering."""
+    await ws.accept()
+    last_frame_id = 0
+    try:
+        while True:
+            if orchestrator and orchestrator.is_running:
+                current_id = orchestrator.stream_frame_id
+                if current_id > last_frame_id:
+                    jpeg = orchestrator.get_latest_jpeg()
+                    if jpeg:
+                        await ws.send_bytes(jpeg)
+                    last_frame_id = current_id
+                await asyncio.sleep(0.005)
+            else:
+                await asyncio.sleep(0.1)  # wait for capture to start
+    except WebSocketDisconnect:
+        pass
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):

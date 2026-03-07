@@ -1,7 +1,9 @@
 import { useState } from "react";
 import EventFeed from "./EventFeed.jsx";
 import TaskPanel from "./TaskPanel.jsx";
+import LiveStream from "./LiveStream.jsx";
 import MontagePlayer from "./MontagePlayer.jsx";
+
 
 const styles = {
   root: {
@@ -47,6 +49,12 @@ const styles = {
     height: "calc(100vh - 65px)",
     overflow: "hidden",
   },
+  sidebar: {
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    borderLeft: "1px solid #1e1e2e",
+  },
 };
 
 export default function Dashboard({ events, connected, captureRunning, onStartCapture, onStopCapture }) {
@@ -73,8 +81,11 @@ export default function Dashboard({ events, connected, captureRunning, onStartCa
       </header>
 
       <div style={styles.body}>
-        <EventFeed events={events} onPlayMontage={setMontageEvent} />
-        <TaskPanel />
+        <LiveStream captureRunning={captureRunning} />
+        <div style={styles.sidebar}>
+          <EventFeed events={events} />
+          <TaskPanel />
+        </div>
       </div>
 
       <MontagePlayer event={activeMontage} onClose={() => setMontageEvent(null)} />
