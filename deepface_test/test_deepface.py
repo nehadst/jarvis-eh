@@ -1,8 +1,12 @@
 import os
 import cv2
 import time
+import threading
 from pathlib import Path
 from deepface import DeepFace
+
+# Haar Cascade for fast live face detection (doesn't block the UI)
+_FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 # ----------------------------
 # Config
@@ -18,28 +22,18 @@ Path(FRAMES_PATH).mkdir(parents=True, exist_ok=True)
 
 def detect_and_draw_faces(frame) -> tuple:
     """
-    Detect faces in frame and draw rectangles around them.
+    Detect faces in frame using Haar Cascade and draw rectangles.
+    Fast enough to run on every frame without blocking the UI.
     Returns (display_frame, face_count).
     """
-    try:
-        # Use retinaface for face detection
-        faces = DeepFace.extract_faces(
-            img_path=frame,
-            detector_backend=DETECTOR_BACKEND,
-            enforce_detection=False,
-            silent=True
-        )
-        
-        display = frame.copy()
-        for face_info in faces:
-            # Extract bounding box
-            x, y, w, h = face_info['facial_area'].values()
-            # Draw rectangle
-            cv2.rectangle(display, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        
-        return display, len(faces)
-    except Exception as e:
-        return frame.copy(), 0
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = _FACE_CASCADE.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+    )
+    display = frame.copy()
+    for (x, y, w, h) in faces:
+        cv2.rectangle(display, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    return display, len(faces)
 
 def run_match(frame_path: str) -> None:
     """
@@ -130,7 +124,8 @@ def main() -> None:
             frame_path = os.path.join(FRAMES_PATH, f"capture_{timestamp}.jpg")
             cv2.imwrite(frame_path, frame)
             print(f"\nSaved frame: {frame_path}")
-            run_match(frame_path)
+            print("Running match in background — window stays responsive...")
+            threading.Thread(target=run_match, args=(frame_path,), daemon=True).start()
 
         elif key == ord("q"):
             break
