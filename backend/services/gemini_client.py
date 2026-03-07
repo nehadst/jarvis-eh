@@ -70,6 +70,42 @@ Write a warm, calm, 1-2 sentence whisper that:
 
 Only output the whisper text. Nothing else."""
 
+    def build_montage_narration_prompt(
+        self,
+        name: str,
+        relationship: str,
+        notes: list[str],
+        last_interaction: str,
+        personal_detail: str,
+        patient_name: str,
+        tag_filter: str | None = None,
+    ) -> str:
+        """
+        Generate a warm 30-second narration script for the memory montage video.
+        The narration plays over the Ken Burns photo slideshow.
+        """
+        notes_text = "\n".join(f"- {n}" for n in notes) if notes else "- No specific notes provided"
+        theme_line = f"Focus on memories related to: {tag_filter}" if tag_filter else ""
+
+        return f"""You are writing the narration for a short memory montage video for {patient_name}, \
+who has dementia. The video shows old family photos of {name}, their {relationship}.
+
+Family notes about {name}:
+{notes_text}
+
+Last interaction: {last_interaction}
+Personal detail: {personal_detail}
+{theme_line}
+
+Write a warm, gentle narration of 3-5 sentences (spoken aloud in ~25 seconds) that:
+- Opens by gently naming who is in the photos
+- Mentions 1-2 real shared memories to spark emotional recognition
+- Uses simple, calm language — no medical terms, no past tense that implies loss
+- Ends with a warm, reassuring line
+- Sounds like a loving family member speaking softly, NOT a formal narrator
+
+Only output the narration text. No titles, no stage directions, nothing else."""
+
 
 # Singleton — import this everywhere
 gemini = GeminiClient() if settings.gemini_api_key else None

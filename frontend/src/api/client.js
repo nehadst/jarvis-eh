@@ -44,9 +44,12 @@ export async function addTask(task, setBy = "caregiver") {
 
 /**
  * Trigger a memory montage for a family member.
+ * @param {string} personId
+ * @param {string} [tag] - optional Cloudinary tag filter, e.g. "christmas"
  */
-export async function triggerMontage(personId) {
-  const res = await fetch(`/api/montage/${personId}`, { method: "POST" });
+export async function triggerMontage(personId, tag) {
+  const url = tag ? `/api/montage/${personId}?tag=${encodeURIComponent(tag)}` : `/api/montage/${personId}`;
+  const res = await fetch(url, { method: "POST" });
   return res.json();
 }
 
