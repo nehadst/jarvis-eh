@@ -60,3 +60,32 @@ export async function fetchFamily() {
   const res = await fetch("/api/family");
   return res.json();
 }
+
+/**
+ * Set who is currently home (feeds into grounding messages).
+ * @param {string} whoIsHome - e.g. "David, Sarah"
+ */
+export async function setHousehold(whoIsHome) {
+  const res = await fetch("/api/household", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ who_is_home: whoIsHome }),
+  });
+  return res.json();
+}
+
+/**
+ * Get current household context.
+ */
+export async function getHousehold() {
+  const res = await fetch("/api/household");
+  return res.json();
+}
+
+/**
+ * Manually trigger an immediate grounding message.
+ */
+export async function triggerGrounding() {
+  const res = await fetch("/api/grounding/trigger", { method: "POST" });
+  return res.json();
+}
