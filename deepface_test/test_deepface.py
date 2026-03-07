@@ -2,23 +2,71 @@ import os
 import cv2
 import time
 import threading
+import queue
 from pathlib import Path
 from deepface import DeepFace
 
 # Haar Cascade for fast live face detection (doesn't block the UI)
 _FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
+# Single worker thread + queue so DeepFace/TensorFlow calls never run concurrently
+_match_queue: queue.Queue = queue.Queue()
+
+def _match_worker() -> None:
+    """Persistent background thread — processes one match at a time."""
+    while True:
+        frame_path = _match_queue.get()
+        if frame_path is None:
+            break
+        if frame_path == "__prewarm__":
+            _prewarm_model()
+        else:
+            run_match(frame_path)
+        _match_queue.task_done()
+
+_worker_thread = threading.Thread(target=_match_worker, daemon=True)
+_worker_thread.start()
+_match_queue.put("__prewarm__")  # warm up TF + rebuild pkl cache immediately on launch
+
 # ----------------------------
 # Config
 # ----------------------------
 DB_PATH = "face_db"
 FRAMES_PATH = "frames"
-MODEL_NAME = "ArcFace"       # strong default to try first
-DETECTOR_BACKEND = "retinaface"  # more robust face detection
+MODEL_NAME = "ArcFace"
+DETECTOR_BACKEND = "opencv"   # fast (~50ms) — retinaface is accurate but ~15s on CPU
 DISTANCE_METRIC = "cosine"
-THRESHOLD = None             # use DeepFace default threshold for the model
+THRESHOLD = None
 
 Path(FRAMES_PATH).mkdir(parents=True, exist_ok=True)
+
+def _prewarm_model() -> None:
+    """
+    Load the ArcFace model + build/verify the face_db .pkl cache at startup
+    so the first Space press is fast. Runs in the worker thread.
+    """
+    import tempfile, numpy as np
+    print("[prewarm] Loading ArcFace model and verifying face_db cache...")
+    # Create a tiny blank image — just enough to trigger model + cache load
+    blank = np.zeros((160, 160, 3), dtype=np.uint8)
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        cv2.imwrite(tmp.name, blank)
+        tmp_path = tmp.name
+    try:
+        DeepFace.find(
+            img_path=tmp_path,
+            db_path=DB_PATH,
+            model_name=MODEL_NAME,
+            detector_backend=DETECTOR_BACKEND,
+            distance_metric=DISTANCE_METRIC,
+            enforce_detection=False,
+            silent=True,
+        )
+    except Exception:
+        pass  # expected — blank image won't match anything
+    finally:
+        os.unlink(tmp_path)
+    print("[prewarm] Ready. Press SPACE to capture.")
 
 def detect_and_draw_faces(frame) -> tuple:
     """
@@ -103,8 +151,9 @@ def main() -> None:
         display, face_count = detect_and_draw_faces(frame)
         
         # Add status text
-        status_text = f"Faces detected: {face_count} | SPACE = capture/test | Q = quit"
-        color = (0, 255, 0) if face_count > 0 else (0, 0, 255)
+        busy = _match_queue.qsize() > 0
+        status_text = f"Faces detected: {face_count} | {'MATCHING...' if busy else 'SPACE = capture'} | Q = quit"
+        color = (0, 165, 255) if busy else ((0, 255, 0) if face_count > 0 else (0, 0, 255))
         cv2.putText(
             display,
             status_text,
@@ -120,12 +169,15 @@ def main() -> None:
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord(" "):
-            timestamp = int(time.time())
-            frame_path = os.path.join(FRAMES_PATH, f"capture_{timestamp}.jpg")
-            cv2.imwrite(frame_path, frame)
-            print(f"\nSaved frame: {frame_path}")
-            print("Running match in background — window stays responsive...")
-            threading.Thread(target=run_match, args=(frame_path,), daemon=True).start()
+            if _match_queue.qsize() > 0:
+                print("Still processing previous capture — please wait...")
+            else:
+                timestamp = int(time.time())
+                frame_path = os.path.join(FRAMES_PATH, f"capture_{timestamp}.jpg")
+                cv2.imwrite(frame_path, frame)
+                print(f"\nSaved frame: {frame_path}")
+                print("Running match in background — window stays responsive...")
+                _match_queue.put(frame_path)
 
         elif key == ord("q"):
             break
