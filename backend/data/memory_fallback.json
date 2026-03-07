@@ -1,1 +1,76 @@
-{}
+{
+  "last_activity": {
+    "time": 1772921450.6015081,
+    "activity": "unknown",
+    "location_hint": ""
+  },
+  "interactions_ronaldo": [
+    {
+      "timestamp": 1772919665.279294,
+      "event": "face_recognized",
+      "whisper": "\"This is Ronaldo, your son. Remember how you both used to play football in the backyard? He's here with you now.\""
+    },
+    {
+      "timestamp": 1772919885.4250948,
+      "event": "face_recognized",
+      "whisper": "This is Ronaldo, your father. Remember, he always tells you stories about his favorite soccer matches."
+    },
+    {
+      "timestamp": 1772920990.763965,
+      "event": "face_recognized",
+      "whisper": "That's Ronaldo, your father. Remember how he made your favorite sandwiches just 18 minutes ago?"
+    }
+  ],
+  "continuity_reminders": [
+    {
+      "timestamp": 1772921029.509739,
+      "activity": "unknown",
+      "message": "Hi Dad, you were just enjoying your book. It's on the table beside your chair."
+    },
+    {
+      "timestamp": 1772921074.8704362,
+      "activity": "unknown",
+      "message": "\"Hi Dad, you were enjoying some light reading. Your book is by the comfy chair if you'd like to continue.\""
+    },
+    {
+      "timestamp": 1772921120.621611,
+      "activity": "thinking or concentrating",
+      "message": "\"Hey Dad, you were thinking about those books on the living room table. Take your time and relax while you do so.\""
+    },
+    {
+      "timestamp": 1772921166.5988941,
+      "activity": "unknown",
+      "message": "Hi Dad, you were just tidying up the living room. Feel free to pick up where you left off."
+    },
+    {
+      "timestamp": 1772921212.676789,
+      "activity": "unknown",
+      "message": "\"Dad, you were enjoying a puzzle; it's on the table if you'd like to continue.\""
+    },
+    {
+      "timestamp": 1772921260.453341,
+      "activity": "unknown",
+      "message": "You were enjoying a book in the living room, Dad. Would you like to continue reading it there?"
+    },
+    {
+      "timestamp": 1772921306.557426,
+      "activity": "unknown",
+      "message": "You were enjoying your book by the window, Dad. Shall I help you find it so you can continue reading?"
+    },
+    {
+      "timestamp": 1772921353.552593,
+      "activity": "unknown",
+      "message": "Hi Dad, you were enjoying your favorite book. It's on the table next to your chair."
+    },
+    {
+      "timestamp": 1772921398.6390898,
+      "activity": "unknown",
+      "message": "You were enjoying a book in the living room, Dad. Would you like to continue reading?"
+    },
+    {
+      "timestamp": 1772921445.6049018,
+      "activity": "unknown",
+      "message": "You were enjoying your book, Dad; it\u2019s right here on the table if you'd like to continue."
+    }
+  ]
+}

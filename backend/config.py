@@ -3,7 +3,11 @@ from pathlib import Path
 
 
 class Settings(BaseSettings):
-    # Google Gemini
+    # OpenAI (primary)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+
+    # Google Gemini (fallback)
     gemini_api_key: str = ""
 
     # ElevenLabs
@@ -19,8 +23,11 @@ class Settings(BaseSettings):
     backboard_api_key: str = ""
     backboard_project_id: str = ""
 
-    # Capture source: "screen" (mss screen grab) or "glasses" (Meta glasses WebSocket)
+    # Capture source: "glasses" | "screen" | "webcam" | "video"
     capture_mode: str = "glasses"
+
+    # Video file path (only used when capture_mode="video")
+    video_path: str = "data/test_clips/sample.mp4"
 
     # Screen capture region (only used when capture_mode="screen")
     capture_left: int = 0
@@ -32,11 +39,11 @@ class Settings(BaseSettings):
     glasses_ws_host: str = "0.0.0.0"
     glasses_ws_port: int = 8765
 
-    # Face recognition
+    # Face recognition (InsightFace)
     face_db_path: str = "data/face_db"
-    face_model: str = "ArcFace"
-    face_detector: str = "retinaface"
-    face_distance_threshold: float = 0.4
+    face_model: str = "buffalo_sc"       # "buffalo_sc" (fast) or "buffalo_l" (more accurate)
+    face_det_size: int = 640             # detection input size — 640 is reliable, 320 is faster
+    face_similarity_threshold: float = 0.4  # cosine similarity — higher = stricter (0.3-0.6 range)
     face_cooldown_seconds: int = 30
 
     # App

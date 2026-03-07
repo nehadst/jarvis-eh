@@ -21,6 +21,7 @@ import numpy as np
 from config import settings
 from capture.frame_capture import FrameCapture
 from capture.glasses_capture import GlassesCapture
+from capture.mock_capture import MockCapture
 from features.face_recognition.recognizer import FaceRecognizer
 from features.situation_grounding.grounder import SituationGrounder
 from features.activity_continuity.tracker import ActivityTracker
@@ -44,12 +45,14 @@ class Orchestrator:
         self.tracker = ActivityTracker(on_event=self.event_callback)
         self.guardian = WanderingGuardian(on_event=self.event_callback)
 
-        # Capture source — Meta glasses (WebSocket) or screen grab (mss)
+        # Capture source
         if settings.capture_mode == "glasses":
             self._capture = GlassesCapture(
                 host=settings.glasses_ws_host,
                 port=settings.glasses_ws_port,
             )
+        elif settings.capture_mode in ("webcam", "video"):
+            self._capture = MockCapture()
         else:
             self._capture = FrameCapture()
 
@@ -131,15 +134,17 @@ class Orchestrator:
         print("[Orchestrator] AI worker stopped.")
 
     def get_latest_jpeg(self) -> bytes | None:
-        """Return the latest frame as JPEG bytes (thread-safe). Used by the MJPEG stream."""
-        # Glasses mode: return raw JPEG from iOS (no re-encoding!)
-        if hasattr(self._capture, 'get_latest_jpeg'):
-            return self._capture.get_latest_jpeg()
-        # Screen capture fallback: encode from numpy
-        with self._frame_lock:
-            frame = self._latest_frame
+        """Return the latest frame as JPEG bytes with face overlay (thread-safe)."""
+        # Glasses mode (H.264): get decoded numpy frame directly
+        if hasattr(self._capture, 'get_latest_frame'):
+            frame = self._capture.get_latest_frame()
+        else:
+            # Screen/webcam/video: read from orchestrator's own buffer
+            with self._frame_lock:
+                frame = self._latest_frame
         if frame is None:
             return None
+        frame = self.face_recognizer.draw_overlay(frame)
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return buf.tobytes()
 
@@ -151,9 +156,9 @@ class Orchestrator:
 
     @property
     def stream_frame_id(self) -> int:
-        """Frame ID that updates the instant a new JPEG arrives (not gated by AI queue)."""
-        if hasattr(self._capture, 'jpeg_id'):
-            return self._capture.jpeg_id
+        """Frame ID that updates the instant a new frame arrives (not gated by AI queue)."""
+        if hasattr(self._capture, 'frame_id'):
+            return self._capture.frame_id
         return self.frame_id
 
     def stop(self) -> None:

@@ -28,11 +28,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from config import settings, FAMILY_PROFILES_PATH
+from config import settings, FACE_DB_PATH, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
 from services.backboard_client import memory
 from features.memory_montage.builder import MontageBuilder
@@ -68,6 +68,7 @@ orchestrator: Orchestrator | None = None
 montage_builder: MontageBuilder | None = None
 capture_thread: threading.Thread | None = None
 event_log: list[dict] = []  # keep the last 100 events in memory
+_main_loop: asyncio.AbstractEventLoop | None = None  # stored at startup
 
 
 def _on_event(event: dict) -> None:
@@ -76,17 +77,17 @@ def _on_event(event: dict) -> None:
     event_log.append(event)
     if len(event_log) > 100:
         event_log.pop(0)
-    # Schedule broadcast on the event loop (orchestrator runs in its own thread)
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        asyncio.run_coroutine_threadsafe(manager.broadcast(event), loop)
+    # Schedule broadcast on the main event loop (safe from any thread)
+    if _main_loop and _main_loop.is_running():
+        asyncio.run_coroutine_threadsafe(manager.broadcast(event), _main_loop)
 
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global orchestrator, montage_builder
+    global orchestrator, montage_builder, _main_loop
+    _main_loop = asyncio.get_running_loop()
     orchestrator = Orchestrator(event_callback=_on_event)
     montage_builder = MontageBuilder(on_event=_on_event)
     yield
@@ -138,6 +139,51 @@ async def update_family_member(person_id: str, body: dict):
     return {"ok": True}
 
 
+@app.post("/api/family/{person_id}/photos")
+async def upload_face_photos(person_id: str, files: list[UploadFile] = File(...)):
+    """
+    Upload one or more face photos for a family member.
+    Saves to data/face_db/{person_id}/ and clears the DeepFace embedding cache
+    so the new photos are picked up on the next recognition cycle.
+    """
+    person_dir = FACE_DB_PATH / person_id
+    person_dir.mkdir(parents=True, exist_ok=True)
+
+    saved = []
+    for f in files:
+        # Sanitize filename
+        safe_name = f.filename.replace("/", "_").replace("\\", "_")
+        dest = person_dir / safe_name
+        content = await f.read()
+        dest.write_bytes(content)
+        saved.append(safe_name)
+
+    # Rebuild face embeddings so new photos are recognized immediately
+    if orchestrator and hasattr(orchestrator, "face_recognizer"):
+        orchestrator.face_recognizer.rebuild_embeddings()
+
+    return {"ok": True, "person_id": person_id, "uploaded": saved}
+
+
+@app.delete("/api/family/{person_id}")
+async def delete_family_member(person_id: str):
+    """Remove a family member's profile and their face photos."""
+    import shutil
+    profile_path = FAMILY_PROFILES_PATH / f"{person_id}.json"
+    face_dir = FACE_DB_PATH / person_id
+
+    if profile_path.exists():
+        profile_path.unlink()
+    if face_dir.exists():
+        shutil.rmtree(face_dir)
+
+    # Rebuild face embeddings
+    if orchestrator and hasattr(orchestrator, "face_recognizer"):
+        orchestrator.face_recognizer.rebuild_embeddings()
+
+    return {"ok": True, "person_id": person_id}
+
+
 @app.post("/api/tasks")
 async def add_task(body: dict):
     """
@@ -185,13 +231,26 @@ async def get_events():
     return event_log
 
 
+@app.get("/api/capture/mode")
+async def get_capture_mode():
+    return {"mode": settings.capture_mode}
+
+
 @app.post("/api/capture/start")
-async def start_capture():
-    global capture_thread
+async def start_capture(body: dict | None = None):
+    global orchestrator, capture_thread
+
+    # Allow the dashboard to override capture mode at start time
+    mode = (body or {}).get("mode")
+    if mode and mode in ("glasses", "webcam", "video", "screen"):
+        settings.capture_mode = mode
+        # Rebuild orchestrator with the new capture source
+        orchestrator = Orchestrator(event_callback=_on_event)
+
     if orchestrator and not orchestrator.is_running:
         capture_thread = threading.Thread(target=orchestrator.run, daemon=True)
         capture_thread.start()
-        return {"ok": True, "message": "Capture started"}
+        return {"ok": True, "message": f"Capture started ({settings.capture_mode})"}
     return {"ok": False, "message": "Already running or not initialized"}
 
 
