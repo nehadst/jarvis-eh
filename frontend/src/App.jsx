@@ -6,6 +6,7 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [connected, setConnected] = useState(false);
   const [captureRunning, setCaptureRunning] = useState(false);
+  const [captureMode, setCaptureMode] = useState("glasses");
 
   useEffect(() => {
     const ws = connectWebSocket({
@@ -16,8 +17,12 @@ export default function App() {
     return () => ws.close();
   }, []);
 
-  const startCapture = async () => {
-    await fetch("/api/capture/start", { method: "POST" });
+  const startCapture = async (mode) => {
+    await fetch("/api/capture/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
     setCaptureRunning(true);
   };
 
@@ -31,6 +36,8 @@ export default function App() {
       events={events}
       connected={connected}
       captureRunning={captureRunning}
+      captureMode={captureMode}
+      onCaptureMode={setCaptureMode}
       onStartCapture={startCapture}
       onStopCapture={stopCapture}
     />

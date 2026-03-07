@@ -2,18 +2,20 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 python-dotenv>=1.0.0
+python-multipart>=0.0.6
 pydantic-settings>=2.2.0
 websockets>=12.0
 
 # Vision & Face Recognition
 opencv-python>=4.8.0
 mss>=9.0.1
-deepface>=0.0.75
-tensorflow>=2.13.0
+insightface>=0.7.0
+onnxruntime>=1.16.0
 numpy>=1.26.0
 Pillow>=10.2.0
 
 # AI Services
+openai>=1.0.0
 google-generativeai>=0.7.0
 elevenlabs>=1.0.0
 cloudinary>=1.40.0
@@ -24,6 +26,9 @@ sounddevice>=0.4.6
 
 # Audio playback
 pygame>=2.5.0
+
+# Video decoding (H.264 from glasses)
+av>=12.0.0
 
 # Utilities
 requests>=2.31.0
