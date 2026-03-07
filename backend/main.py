@@ -5,15 +5,17 @@ Endpoints:
   GET  /health                     — liveness check
   GET  /api/family                 — list all family profiles
   GET  /api/family/{id}            — get one profile
+  POST /api/family/{id}            — create / update a profile
   POST /api/tasks                  — caregiver adds a task for the patient
   GET  /api/tasks                  — get current active task
   POST /api/household              — set who is currently home
   GET  /api/household              — get current household context
   POST /api/grounding/trigger      — manually trigger a grounding message
+  GET  /api/tasks                  — get the current active task
   GET  /api/events                 — recent event log
   POST /api/capture/start          — start the live frame-capture loop
   POST /api/capture/stop           — stop the loop
-  POST /api/montage/{person_id}    — manually trigger a memory montage
+  POST /api/montage/{person_id}    — on-demand memory montage (optional ?tag=christmas)
   WS   /ws                         — real-time event stream to the dashboard
 """
 
@@ -24,12 +26,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
 from services.backboard_client import memory
+from features.memory_montage.builder import MontageBuilder
 
 
 # ─── WebSocket connection manager ────────────────────────────────────────────
@@ -59,6 +62,7 @@ manager = ConnectionManager()
 # ─── Global state ─────────────────────────────────────────────────────────────
 
 orchestrator: Orchestrator | None = None
+montage_builder: MontageBuilder | None = None
 capture_thread: threading.Thread | None = None
 event_log: list[dict] = []  # keep the last 100 events in memory
 
@@ -79,8 +83,9 @@ def _on_event(event: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global orchestrator
+    global orchestrator, montage_builder
     orchestrator = Orchestrator(event_callback=_on_event)
+    montage_builder = MontageBuilder(on_event=_on_event)
     yield
     if orchestrator:
         orchestrator.stop()
@@ -196,14 +201,38 @@ async def stop_capture():
 
 
 @app.post("/api/montage/{person_id}")
-async def trigger_montage(person_id: str):
-    """Caregiver manually triggers a memory montage for a person."""
+async def trigger_montage(
+    person_id: str,
+    tag: str | None = Query(default=None, description="Optional tag filter, e.g. 'christmas'"),
+):
+    """
+    Caregiver on-demand montage trigger.
+    Runs the full pipeline (Gemini narration → ElevenLabs → Cloudinary) in a
+    background thread and broadcasts a montage_ready event to all WS clients.
+
+    Query params:
+      ?tag=christmas  — narrows photo selection to photos also tagged 'christmas'
+    """
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     if not path.exists():
         return {"error": "Person not found"}, 404
+
+    if not montage_builder:
+        return {"error": "Montage service not initialised"}, 503
+
+    # Run in a background thread so the HTTP response returns immediately
+    def _run():
+        montage_builder.build(person_id, tag_filter=tag, force=True)
+
+    threading.Thread(target=_run, daemon=True).start()
+
     profile = json.loads(path.read_text())
-    _on_event({"type": "montage_requested", "person_id": person_id, "person": profile.get("name")})
-    return {"ok": True, "message": f"Montage triggered for {profile.get('name')}"}
+    return {
+        "ok": True,
+        "message": f"Montage building for {profile.get('name')} — watch the dashboard",
+        "person_id": person_id,
+        "tag_filter": tag,
+    }
 
 
 # ─── WebSocket ────────────────────────────────────────────────────────────────
