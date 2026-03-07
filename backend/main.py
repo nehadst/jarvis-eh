@@ -16,6 +16,8 @@ Endpoints:
   POST /api/capture/start          — start the live frame-capture loop
   POST /api/capture/stop           — stop the loop
   POST /api/montage/{person_id}    — on-demand memory montage (optional ?tag=christmas)
+  GET  /api/safezones              — get current safe zone list
+  POST /api/safezones              — update safe zone list
   WS   /ws                         — real-time event stream to the dashboard
 """
 
@@ -32,6 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
 from services.backboard_client import memory
+from features.wandering_guardian.guardian import DEFAULT_SAFE_ZONES
 from features.memory_montage.builder import MontageBuilder
 
 
@@ -233,6 +236,35 @@ async def trigger_montage(
         "person_id": person_id,
         "tag_filter": tag,
     }
+
+
+@app.get("/api/safezones")
+async def get_safezones():
+    """
+    Return the current safe zone list (caregiver-stored zones merged with
+    the built-in defaults).
+    """
+    stored = memory.retrieve("safe_zones")
+    custom: list[str] = stored if isinstance(stored, list) else []
+    all_zones = sorted(DEFAULT_SAFE_ZONES | {z.lower() for z in custom})
+    return {"safe_zones": all_zones, "custom_zones": custom}
+
+
+@app.post("/api/safezones")
+async def set_safezones(body: dict):
+    """
+    Update the caregiver-defined safe zone list.
+    Body: {"safe_zones": ["garden", "sunroom"]}
+    Only the *custom* (non-default) zones need to be stored; the guardian
+    merges them with DEFAULT_SAFE_ZONES at runtime.
+    """
+    zones = body.get("safe_zones", [])
+    if not isinstance(zones, list):
+        return {"error": "safe_zones must be a list"}, 400
+    # Persist only the custom additions (deduplicated, lowercased)
+    custom = sorted({z.lower().strip() for z in zones if z.strip()})
+    memory.store("safe_zones", custom)
+    return {"ok": True, "safe_zones": custom}
 
 
 # ─── WebSocket ────────────────────────────────────────────────────────────────
