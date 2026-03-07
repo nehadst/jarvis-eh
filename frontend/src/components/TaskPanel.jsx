@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding } from "../api/client.js";
+import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
 
 const styles = {
   panel: {
@@ -95,6 +95,56 @@ const styles = {
   success: { fontSize: 13, color: "#34d399", marginTop: 4 },
   sending: { fontSize: 13, color: "#60a5fa", marginTop: 4 },
   tip: { fontSize: 12, color: "#4b5563", lineHeight: 1.5 },
+  chipRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 8,
+  },
+  chip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    background: "#1a1a24",
+    border: "1px solid #2d2d3d",
+    borderRadius: 999,
+    padding: "3px 10px",
+    fontSize: 12,
+    color: "#e8e8f0",
+  },
+  chipRemove: {
+    background: "none",
+    border: "none",
+    color: "#6b7280",
+    cursor: "pointer",
+    fontSize: 13,
+    lineHeight: 1,
+    padding: 0,
+  },
+  addRow: {
+    display: "flex",
+    gap: 6,
+  },
+  addInput: {
+    flex: 1,
+    background: "#1a1a24",
+    border: "1px solid #2d2d3d",
+    borderRadius: 8,
+    color: "#e8e8f0",
+    padding: "8px 12px",
+    fontSize: 13,
+    fontFamily: "inherit",
+  },
+  addBtn: {
+    padding: "8px 14px",
+    background: "#374151",
+    color: "#e8e8f0",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: 13,
+  },
 };
 
 export default function TaskPanel() {
@@ -116,6 +166,11 @@ export default function TaskPanel() {
   const [montaging, setMontaging] = useState(false);
   const [montageSent, setMontageSent] = useState(false);
 
+  // Safe zones state — custom zones editable by caregiver
+  const [customZones, setCustomZones] = useState([]);
+  const [defaultZones, setDefaultZones] = useState([]);
+  const [newZone, setNewZone] = useState("");
+
   useEffect(() => {
     fetchFamily()
       .then((data) => {
@@ -125,6 +180,15 @@ export default function TaskPanel() {
       .catch(() => {});
     getHousehold()
       .then((data) => setWhoIsHome(data?.who_is_home || ""))
+      .catch(() => {});
+    getSafezones()
+      .then((data) => {
+        setCustomZones(data?.custom_zones || []);
+        // defaults = all_zones minus custom
+        const all = data?.safe_zones || [];
+        const custom = data?.custom_zones || [];
+        setDefaultZones(all.filter((z) => !custom.includes(z)));
+      })
       .catch(() => {});
   }, []);
 
@@ -162,6 +226,21 @@ export default function TaskPanel() {
     } finally {
       setMontaging(false);
     }
+  };
+
+  const handleAddZone = async () => {
+    const zone = newZone.trim().toLowerCase();
+    if (!zone || customZones.includes(zone)) return;
+    const updated = [...customZones, zone];
+    setCustomZones(updated);
+    setNewZone("");
+    await setSafezones(updated).catch(() => {});
+  };
+
+  const handleRemoveZone = async (zone) => {
+    const updated = customZones.filter((z) => z !== zone);
+    setCustomZones(updated);
+    await setSafezones(updated).catch(() => {});
   };
 
   return (
@@ -215,6 +294,45 @@ export default function TaskPanel() {
         {groundingTriggered && <p style={styles.success}>Triggered!</p>}
       </section>
 
+      {/* Safe Zones */}
+      <section>
+        <p style={styles.heading}>Safe Zones</p>
+        <p style={{ ...styles.tip, marginBottom: 10 }}>
+          Rooms where the patient is allowed to be. An alert fires when they
+          leave all safe zones for 3 consecutive checks.
+        </p>
+        {/* Built-in defaults — shown as read-only chips */}
+        <div style={styles.chipRow}>
+          {defaultZones.map((z) => (
+            <span key={z} style={{ ...styles.chip, opacity: 0.45 }}>{z}</span>
+          ))}
+          {/* Custom caregiver-added zones — removable */}
+          {customZones.map((z) => (
+            <span key={z} style={styles.chip}>
+              {z}
+              <button
+                style={styles.chipRemove}
+                onClick={() => handleRemoveZone(z)}
+                title={`Remove ${z}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <div style={styles.addRow}>
+          <input
+            style={styles.addInput}
+            type="text"
+            placeholder="Add a room (e.g. garden)"
+            value={newZone}
+            onChange={(e) => setNewZone(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAddZone()}
+          />
+          <button style={styles.addBtn} onClick={handleAddZone}>Add</button>
+        </div>
+      </section>
+
       {/* Memory Montage */}
       <section>
         <p style={styles.heading}>Memory Montage</p>
@@ -259,6 +377,7 @@ export default function TaskPanel() {
           <strong style={{ color: "#34d399" }}>Green</strong> — Situation grounding<br />
           <strong style={{ color: "#fbbf24" }}>Yellow</strong> — Activity reminder<br />
           <strong style={{ color: "#f87171" }}>Red</strong> — Wandering alert<br />
+          <strong style={{ color: "#ef4444" }}>Bright red</strong> — Wandering escalated<br />
           <strong style={{ color: "#a78bfa" }}>Violet</strong> — Conversation assist<br />
           <strong style={{ color: "#60a5fa" }}>Blue</strong> — Montage ready
         </p>
