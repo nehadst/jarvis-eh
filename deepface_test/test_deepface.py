@@ -11,6 +11,8 @@ _FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_front
 
 # Single worker thread + queue so DeepFace/TensorFlow calls never run concurrently
 _match_queue: queue.Queue = queue.Queue()
+_worker_busy = threading.Event()   # set while the worker is actively processing
+_prewarm_done = threading.Event()  # set once prewarm finishes
 
 def _match_worker() -> None:
     """Persistent background thread — processes one match at a time."""
@@ -18,15 +20,16 @@ def _match_worker() -> None:
         frame_path = _match_queue.get()
         if frame_path is None:
             break
-        if frame_path == "__prewarm__":
-            _prewarm_model()
-        else:
-            run_match(frame_path)
-        _match_queue.task_done()
-
-_worker_thread = threading.Thread(target=_match_worker, daemon=True)
-_worker_thread.start()
-_match_queue.put("__prewarm__")  # warm up TF + rebuild pkl cache immediately on launch
+        _worker_busy.set()
+        try:
+            if frame_path == "__prewarm__":
+                _prewarm_model()
+                _prewarm_done.set()
+            else:
+                run_match(frame_path)
+        finally:
+            _worker_busy.clear()
+            _match_queue.task_done()
 
 # ----------------------------
 # Config
@@ -133,6 +136,11 @@ def main() -> None:
     if not os.path.isdir(DB_PATH):
         raise FileNotFoundError(f"Database folder not found: {DB_PATH}")
 
+    # Start worker and prewarm now — all functions are defined
+    _worker_thread = threading.Thread(target=_match_worker, daemon=True)
+    _worker_thread.start()
+    _match_queue.put("__prewarm__")
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError("Could not open webcam.")
@@ -151,9 +159,14 @@ def main() -> None:
         display, face_count = detect_and_draw_faces(frame)
         
         # Add status text
-        busy = _match_queue.qsize() > 0
-        status_text = f"Faces detected: {face_count} | {'MATCHING...' if busy else 'SPACE = capture'} | Q = quit"
-        color = (0, 165, 255) if busy else ((0, 255, 0) if face_count > 0 else (0, 0, 255))
+        if not _prewarm_done.is_set():
+            label, color = "LOADING MODEL...", (0, 165, 255)
+        elif _worker_busy.is_set() or _match_queue.qsize() > 0:
+            label, color = "MATCHING...", (0, 165, 255)
+        else:
+            label = "SPACE = capture"
+            color = (0, 255, 0) if face_count > 0 else (0, 0, 255)
+        status_text = f"Faces detected: {face_count} | {label} | Q = quit"
         cv2.putText(
             display,
             status_text,
@@ -169,7 +182,9 @@ def main() -> None:
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord(" "):
-            if _match_queue.qsize() > 0:
+            if not _prewarm_done.is_set():
+                print("Still loading model — please wait for [prewarm] Ready...")
+            elif _worker_busy.is_set() or _match_queue.qsize() > 0:
                 print("Still processing previous capture — please wait...")
             else:
                 timestamp = int(time.time())
