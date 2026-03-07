@@ -136,6 +136,10 @@ async def update_family_member(person_id: str, body: dict):
     FAMILY_PROFILES_PATH.mkdir(parents=True, exist_ok=True)
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     path.write_text(json.dumps(body, indent=2))
+    # Hot-reload so the running recognizer sees the new/updated profile
+    # without requiring a server restart.
+    if orchestrator:
+        orchestrator.face_recognizer.reload_profiles()
     return {"ok": True}
 
 
