@@ -2,6 +2,8 @@ import { useState } from "react";
 import EventFeed from "./EventFeed.jsx";
 import TaskPanel from "./TaskPanel.jsx";
 import LiveStream from "./LiveStream.jsx";
+import MontagePlayer from "./MontagePlayer.jsx";
+
 
 const styles = {
   root: {
@@ -55,7 +57,13 @@ const styles = {
   },
 };
 
-export default function Dashboard({ events, connected, captureRunning, onStartCapture, onStopCapture, }) {
+export default function Dashboard({ events, connected, captureRunning, onStartCapture, onStopCapture }) {
+  const [montageEvent, setMontageEvent] = useState(null);
+
+  // Show the player when a montage_ready event arrives
+  const latestMontage = events.findLast?.((e) => e.type === "montage_ready") ?? null;
+  const activeMontage = montageEvent ?? latestMontage;
+
   return (
     <div style={styles.root}>
       <header style={styles.header}>
@@ -79,6 +87,8 @@ export default function Dashboard({ events, connected, captureRunning, onStartCa
           <TaskPanel />
         </div>
       </div>
+
+      <MontagePlayer event={activeMontage} onClose={() => setMontageEvent(null)} />
     </div>
   );
 }

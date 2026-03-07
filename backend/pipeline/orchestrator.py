@@ -61,6 +61,11 @@ class Orchestrator:
         self.grounder.set_active_task(task, set_by)
         self.tracker.set_active_task(task)
 
+    def trigger_manual_grounding(self) -> None:
+        """Grab a fresh frame and force a grounding message immediately."""
+        frame = self._capture.grab_once()
+        self.grounder.trigger_manual(frame)
+
     def run(self) -> None:
         """
         Main blocking loop. Call from a daemon thread.
