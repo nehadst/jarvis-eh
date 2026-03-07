@@ -4,7 +4,7 @@ const TYPE_CONFIG = {
   activity_continuity: { label: "Activity Reminder", color: "#fbbf24", icon: "🔄" },
   wandering_detected: { label: "Wandering Alert", color: "#f87171", icon: "⚠️" },
   conversation_assist: { label: "Conversation Assist", color: "#a78bfa", icon: "💬" },
-  montage_requested: { label: "Montage Requested", color: "#60a5fa", icon: "🎬" },
+  montage_ready: { label: "Montage Ready", color: "#60a5fa", icon: "🎬" },
 };
 
 const styles = {
@@ -41,6 +41,18 @@ const styles = {
   time: { fontSize: 11, color: "#6b7280", marginLeft: "auto" },
   message: { fontSize: 14, lineHeight: 1.5, color: "#d1d5db" },
   detail: { fontSize: 12, color: "#6b7280", marginTop: 4 },
+  playBtn: {
+    display: "inline-block",
+    marginTop: 8,
+    padding: "4px 12px",
+    background: "#1d4ed8",
+    color: "#bfdbfe",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 600,
+  },
 };
 
 function formatTime(iso) {
@@ -48,7 +60,7 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function EventCard({ event }) {
+function EventCard({ event, onPlayMontage }) {
   const cfg = TYPE_CONFIG[event.type] || { label: event.type, color: "#9ca3af", icon: "•" };
   const message = event.whisper || event.message || "";
 
@@ -64,18 +76,23 @@ function EventCard({ event }) {
       {event.scene && <p style={styles.detail}>Scene: {event.scene}</p>}
       {event.activity && <p style={styles.detail}>Activity: {event.activity}</p>}
       {event.confidence && <p style={styles.detail}>Confidence: {(event.confidence * 100).toFixed(1)}%</p>}
+      {event.type === "montage_ready" && event.montage_url && (
+        <button style={styles.playBtn} onClick={() => onPlayMontage?.(event)}>
+          Play Montage
+        </button>
+      )}
     </div>
   );
 }
 
-export default function EventFeed({ events }) {
+export default function EventFeed({ events, onPlayMontage }) {
   if (!events.length) {
     return <div style={styles.empty}>No events yet. Start capture to begin.</div>;
   }
   return (
     <div style={styles.container}>
       {events.map((e, i) => (
-        <EventCard key={i} event={e} />
+        <EventCard key={i} event={e} onPlayMontage={onPlayMontage} />
       ))}
     </div>
   );
