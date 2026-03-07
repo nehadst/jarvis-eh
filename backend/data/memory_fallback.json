@@ -1,0 +1,14 @@
+{
+  "last_activity": {
+    "time": 60.0,
+    "activity": "watching tv",
+    "location_hint": "remote on the table"
+  },
+  "continuity_reminders": [
+    {
+      "timestamp": 45.0,
+      "activity": "watching tv",
+      "message": "That's what you were doing. Let's get back to it."
+    }
+  ]
+}
