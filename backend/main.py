@@ -7,6 +7,10 @@ Endpoints:
   GET  /api/family/{id}            — get one profile
   POST /api/family/{id}            — create / update a profile
   POST /api/tasks                  — caregiver adds a task for the patient
+  GET  /api/tasks                  — get current active task
+  POST /api/household              — set who is currently home
+  GET  /api/household              — get current household context
+  POST /api/grounding/trigger      — manually trigger a grounding message
   GET  /api/tasks                  — get the current active task
   GET  /api/events                 — recent event log
   POST /api/capture/start          — start the live frame-capture loop
@@ -27,6 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
+from services.backboard_client import memory
 from features.memory_montage.builder import MontageBuilder
 
 
@@ -146,6 +151,30 @@ async def get_task():
     if orchestrator:
         return {"task": orchestrator.active_task}
     return {"task": None}
+
+
+@app.post("/api/household")
+async def set_household(body: dict):
+    """
+    Set who is currently home.
+    Example body: {"who_is_home": "David, Sarah"}
+    """
+    memory.store("household_context", {"who_is_home": body.get("who_is_home", "")})
+    return {"ok": True}
+
+
+@app.get("/api/household")
+async def get_household():
+    return memory.retrieve("household_context") or {"who_is_home": ""}
+
+
+@app.post("/api/grounding/trigger")
+async def trigger_grounding():
+    """Caregiver manually triggers an immediate grounding message."""
+    if orchestrator:
+        orchestrator.trigger_manual_grounding()
+        return {"ok": True}
+    return {"ok": False, "message": "Orchestrator not initialized"}
 
 
 @app.get("/api/events")
