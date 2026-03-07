@@ -26,9 +26,8 @@ import json
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings, FAMILY_PROFILES_PATH
@@ -77,9 +76,11 @@ def _on_event(event: dict) -> None:
     if len(event_log) > 100:
         event_log.pop(0)
     # Schedule broadcast on the event loop (orchestrator runs in its own thread)
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
+    try:
+        loop = asyncio.get_running_loop()
         asyncio.run_coroutine_threadsafe(manager.broadcast(event), loop)
+    except RuntimeError:
+        pass  # no running loop yet (startup phase)
 
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ async def list_family():
 async def get_family_member(person_id: str):
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     if not path.exists():
-        return {"error": "not found"}, 404
+        raise HTTPException(status_code=404, detail="Family member not found")
     return json.loads(path.read_text())
 
 
@@ -218,10 +219,10 @@ async def trigger_montage(
     """
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     if not path.exists():
-        return {"error": "Person not found"}, 404
+        raise HTTPException(status_code=404, detail="Person not found")
 
     if not montage_builder:
-        return {"error": "Montage service not initialised"}, 503
+        raise HTTPException(status_code=503, detail="Montage service not initialised")
 
     # Run in a background thread so the HTTP response returns immediately
     def _run():
@@ -260,7 +261,7 @@ async def set_safezones(body: dict):
     """
     zones = body.get("safe_zones", [])
     if not isinstance(zones, list):
-        return {"error": "safe_zones must be a list"}, 400
+        raise HTTPException(status_code=400, detail="safe_zones must be a list")
     # Persist only the custom additions (deduplicated, lowercased)
     custom = sorted({z.lower().strip() for z in zones if z.strip()})
     memory.store("safe_zones", custom)
