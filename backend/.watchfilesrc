@@ -1,0 +1,2 @@
+[watchfiles]
+ignore_paths = [".venv"]

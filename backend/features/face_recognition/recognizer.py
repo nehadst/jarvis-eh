@@ -25,7 +25,6 @@ from typing import Callable
 
 import cv2
 import numpy as np
-from deepface import DeepFace
 
 from config import settings, FACE_DB_PATH, FAMILY_PROFILES_PATH
 from services.gemini_client import gemini
@@ -67,6 +66,7 @@ class FaceRecognizer:
             tmp_path = tmp.name
 
         try:
+            from deepface import DeepFace  # lazy: avoids pandas/pyarrow/numpy-1.x crash at startup
             results = DeepFace.find(
                 img_path=tmp_path,
                 db_path=str(FACE_DB_PATH),
