@@ -1,2 +1,43 @@
+# ─── Secrets ─────────────────────────────────────────────────────────────────
+.env
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+*.log
+
+# ─── Face DB & Captured Frames (local media, not for git) ────────────────────
 deepface_test/face_db/
 deepface_test/frames/
+backend/data/face_db/
+backend/data/frames/
+# Keep the directory structure
+!backend/data/face_db/.gitkeep
+!backend/data/family_profiles/
+
+# ─── DeepFace model cache ─────────────────────────────────────────────────────
+.deepface/
+
+# ─── Node / Frontend ──────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── VS Code ──────────────────────────────────────────────────────────────────
+.vscode/settings.json

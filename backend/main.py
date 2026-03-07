@@ -1,0 +1,199 @@
+"""
+REWIND — FastAPI backend entry point.
+
+Endpoints:
+  GET  /health                     — liveness check
+  GET  /api/family                 — list all family profiles
+  GET  /api/family/{id}            — get one profile
+  POST /api/tasks                  — caregiver adds a task for the patient
+  GET  /api/events                 — recent event log
+  POST /api/capture/start          — start the live frame-capture loop
+  POST /api/capture/stop           — stop the loop
+  POST /api/montage/{person_id}    — manually trigger a memory montage
+  WS   /ws                         — real-time event stream to the dashboard
+"""
+
+import asyncio
+import json
+import threading
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+
+from config import settings, FAMILY_PROFILES_PATH
+from pipeline.orchestrator import Orchestrator
+
+
+# ─── WebSocket connection manager ────────────────────────────────────────────
+
+class ConnectionManager:
+    def __init__(self) -> None:
+        self.active: list[WebSocket] = []
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self.active.append(ws)
+
+    def disconnect(self, ws: WebSocket) -> None:
+        self.active.remove(ws)
+
+    async def broadcast(self, data: dict) -> None:
+        message = json.dumps(data)
+        for ws in list(self.active):
+            try:
+                await ws.send_text(message)
+            except Exception:
+                self.disconnect(ws)
+
+
+manager = ConnectionManager()
+
+# ─── Global state ─────────────────────────────────────────────────────────────
+
+orchestrator: Orchestrator | None = None
+capture_thread: threading.Thread | None = None
+event_log: list[dict] = []  # keep the last 100 events in memory
+
+
+def _on_event(event: dict) -> None:
+    """Called by the orchestrator whenever a feature fires. Thread-safe."""
+    event["timestamp"] = datetime.utcnow().isoformat()
+    event_log.append(event)
+    if len(event_log) > 100:
+        event_log.pop(0)
+    # Schedule broadcast on the event loop (orchestrator runs in its own thread)
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        asyncio.run_coroutine_threadsafe(manager.broadcast(event), loop)
+
+
+# ─── Lifespan ─────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global orchestrator
+    orchestrator = Orchestrator(event_callback=_on_event)
+    yield
+    if orchestrator:
+        orchestrator.stop()
+
+
+# ─── App ──────────────────────────────────────────────────────────────────────
+
+app = FastAPI(title="REWIND API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ─── Routes ───────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "patient": settings.patient_name}
+
+
+@app.get("/api/family")
+async def list_family():
+    profiles = []
+    for f in FAMILY_PROFILES_PATH.glob("*.json"):
+        profiles.append(json.loads(f.read_text()))
+    return profiles
+
+
+@app.get("/api/family/{person_id}")
+async def get_family_member(person_id: str):
+    path = FAMILY_PROFILES_PATH / f"{person_id}.json"
+    if not path.exists():
+        return {"error": "not found"}, 404
+    return json.loads(path.read_text())
+
+
+@app.post("/api/family/{person_id}")
+async def update_family_member(person_id: str, body: dict):
+    """Create or update a family profile."""
+    FAMILY_PROFILES_PATH.mkdir(parents=True, exist_ok=True)
+    path = FAMILY_PROFILES_PATH / f"{person_id}.json"
+    path.write_text(json.dumps(body, indent=2))
+    return {"ok": True}
+
+
+@app.post("/api/tasks")
+async def add_task(body: dict):
+    """
+    Caregiver adds an active task for the patient.
+    Example body: {"task": "Go to the fridge and grab an orange", "set_by": "Sarah"}
+    """
+    if orchestrator:
+        orchestrator.set_active_task(body.get("task", ""), body.get("set_by", "caregiver"))
+    return {"ok": True}
+
+
+@app.get("/api/tasks")
+async def get_task():
+    if orchestrator:
+        return {"task": orchestrator.active_task}
+    return {"task": None}
+
+
+@app.get("/api/events")
+async def get_events():
+    return event_log
+
+
+@app.post("/api/capture/start")
+async def start_capture():
+    global capture_thread
+    if orchestrator and not orchestrator.is_running:
+        capture_thread = threading.Thread(target=orchestrator.run, daemon=True)
+        capture_thread.start()
+        return {"ok": True, "message": "Capture started"}
+    return {"ok": False, "message": "Already running or not initialized"}
+
+
+@app.post("/api/capture/stop")
+async def stop_capture():
+    if orchestrator:
+        orchestrator.stop()
+        return {"ok": True, "message": "Capture stopped"}
+    return {"ok": False}
+
+
+@app.post("/api/montage/{person_id}")
+async def trigger_montage(person_id: str):
+    """Caregiver manually triggers a memory montage for a person."""
+    path = FAMILY_PROFILES_PATH / f"{person_id}.json"
+    if not path.exists():
+        return {"error": "Person not found"}, 404
+    profile = json.loads(path.read_text())
+    _on_event({"type": "montage_requested", "person_id": person_id, "person": profile.get("name")})
+    return {"ok": True, "message": f"Montage triggered for {profile.get('name')}"}
+
+
+# ─── WebSocket ────────────────────────────────────────────────────────────────
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await manager.connect(ws)
+    # Send recent events on connect so dashboard isn't blank
+    for event in event_log[-20:]:
+        await ws.send_text(json.dumps(event))
+    try:
+        while True:
+            await ws.receive_text()  # keep-alive
+    except WebSocketDisconnect:
+        manager.disconnect(ws)
+
+
+# ─── Dev runner ───────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=settings.port, reload=settings.debug)

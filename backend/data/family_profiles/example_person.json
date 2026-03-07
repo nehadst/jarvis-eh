@@ -1,0 +1,21 @@
+{
+  "id": "sarah_johnson",
+  "name": "Sarah Johnson",
+  "relationship": "granddaughter",
+  "age": 24,
+  "face_folder": "sarah_johnson",
+  "cloudinary_folder": "rewind/family/sarah_johnson",
+  "last_interaction": {
+    "date": "2026-02-28",
+    "summary": "She came by and you watched a movie together"
+  },
+  "personal_detail": "She just started working as a nurse and loves it",
+  "voice_anchor_file": null,
+  "notes": [
+    "Favourite memory together: baking Christmas cookies",
+    "She calls every Sunday"
+  ],
+  "calming_anchors": [
+    "Remember baking cookies with Sarah at Christmas?"
+  ]
+}
