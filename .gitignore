@@ -9,6 +9,11 @@ __pycache__/
 .Python
 venv/
 .venv/
+
+.env.local
+.env
+.env.development
+.env.production
 env/
 *.egg-info/
 dist/
