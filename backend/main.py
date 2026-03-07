@@ -9,6 +9,7 @@ Endpoints:
   GET  /api/events                 — recent event log
   POST /api/capture/start          — start the live frame-capture loop
   POST /api/capture/stop           — stop the loop
+  GET  /api/stream                 — live MJPEG view of the glasses feed
   POST /api/montage/{person_id}    — manually trigger a memory montage
   WS   /ws                         — real-time event stream to the dashboard
 """
@@ -16,12 +17,14 @@ Endpoints:
 import asyncio
 import json
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from config import settings, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
@@ -175,6 +178,31 @@ async def trigger_montage(person_id: str):
     profile = json.loads(path.read_text())
     _on_event({"type": "montage_requested", "person_id": person_id, "person": profile.get("name")})
     return {"ok": True, "message": f"Montage triggered for {profile.get('name')}"}
+
+
+# ─── Live Stream ─────────────────────────────────────────────────────────
+
+def _mjpeg_generator():
+    """Yield MJPEG frames for the browser live view."""
+    while orchestrator and orchestrator.is_running:
+        jpeg = orchestrator.get_latest_jpeg()
+        if jpeg:
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+            )
+        time.sleep(0.5)  # ~2 FPS to match pipeline rate
+
+
+@app.get("/api/stream")
+async def live_stream():
+    """Open http://localhost:8000/api/stream in a browser to see the glasses feed."""
+    if not orchestrator or not orchestrator.is_running:
+        return {"error": "Capture not running. POST /api/capture/start first."}
+    return StreamingResponse(
+        _mjpeg_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
 
 
 # ─── WebSocket ────────────────────────────────────────────────────────────────

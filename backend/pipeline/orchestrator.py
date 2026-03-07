@@ -11,10 +11,16 @@ Usage (from main.py):
     thread.start()
 """
 
+import threading
 import time
 from typing import Callable
 
+import cv2
+import numpy as np
+
+from config import settings
 from capture.frame_capture import FrameCapture
+from capture.glasses_capture import GlassesCapture
 from features.face_recognition.recognizer import FaceRecognizer
 from features.situation_grounding.grounder import SituationGrounder
 from features.activity_continuity.tracker import ActivityTracker
@@ -26,6 +32,8 @@ class Orchestrator:
         self.event_callback = event_callback or (lambda e: None)
         self.is_running = False
         self.active_task: str | None = None
+        self._latest_frame: np.ndarray | None = None
+        self._frame_lock = threading.Lock()
 
         # Feature modules
         self.face_recognizer = FaceRecognizer(on_event=self.event_callback)
@@ -33,7 +41,14 @@ class Orchestrator:
         self.tracker = ActivityTracker(on_event=self.event_callback)
         self.guardian = WanderingGuardian(on_event=self.event_callback)
 
-        self._capture = FrameCapture()
+        # Capture source — Meta glasses (WebSocket) or screen grab (mss)
+        if settings.capture_mode == "glasses":
+            self._capture = GlassesCapture(
+                host=settings.glasses_ws_host,
+                port=settings.glasses_ws_port,
+            )
+        else:
+            self._capture = FrameCapture()
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -58,6 +73,9 @@ class Orchestrator:
 
             frame_count += 1
 
+            with self._frame_lock:
+                self._latest_frame = frame
+
             # ── Feature 1: Face Recognition (every frame) ─────────────────
             self.face_recognizer.process(frame)
 
@@ -73,6 +91,15 @@ class Orchestrator:
                 self.guardian.process(frame)
 
         print("[Orchestrator] Capture loop stopped.")
+
+    def get_latest_jpeg(self) -> bytes | None:
+        """Return the latest frame as JPEG bytes (thread-safe). Used by the MJPEG stream."""
+        with self._frame_lock:
+            frame = self._latest_frame
+        if frame is None:
+            return None
+        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return buf.tobytes()
 
     def stop(self) -> None:
         self.is_running = False
