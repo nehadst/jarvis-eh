@@ -66,6 +66,11 @@ class Orchestrator:
         self.grounder.set_active_task(task, set_by)
         self.tracker.set_active_task(task)
 
+    def clear_active_task(self) -> None:
+        """Remove the current task (caregiver marks it done or cancels it)."""
+        self.active_task = None
+        self.grounder.clear_active_task()
+
     def trigger_manual_grounding(self) -> None:
         """Grab a fresh frame and force a grounding message immediately."""
         frame = self._capture.grab_once()

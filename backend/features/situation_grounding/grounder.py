@@ -34,11 +34,16 @@ from services.backboard_client import memory
 # How often (seconds) the same grounding message can repeat
 GROUNDING_COOLDOWN = 60
 
-# Motion delta threshold — higher = only trigger on larger movement
-MOTION_THRESHOLD = 3000
+# Motion delta threshold (sum of all 0/255 threshold pixels).
+# np.sum(thresh) = changed_pixel_count × 255, so 75_000 ≈ ~300 changed pixels
+# after a 21×21 Gaussian blur — below this the scene is essentially still.
+MOTION_THRESHOLD = 75_000
 
 # How many consecutive low-motion frames before we flag as "stopped/lost"
 STILL_FRAME_LIMIT = 20  # ~10 seconds at 2 FPS
+
+# How many above/below threshold transitions in the motion history = head-turning
+OSCILLATION_TRANSITIONS = 4  # 4 transitions in 10 frames (~5s) = confused pacing
 
 
 class SituationGrounder:
@@ -51,6 +56,12 @@ class SituationGrounder:
         self._active_task: str | None = None
         self._active_task_set_by: str = "caregiver"
 
+        # Restore any task that was set before a server restart
+        saved = memory.retrieve("active_patient_task")
+        if saved and isinstance(saved, dict) and saved.get("task"):
+            self._active_task = saved["task"]
+            self._active_task_set_by = saved.get("set_by", "caregiver")
+
     # ── Public ────────────────────────────────────────────────────────────────
 
     def set_active_task(self, task: str, set_by: str = "caregiver") -> None:
@@ -58,6 +69,12 @@ class SituationGrounder:
         self._active_task = task
         self._active_task_set_by = set_by
         memory.store("active_patient_task", {"task": task, "set_by": set_by})
+
+    def clear_active_task(self) -> None:
+        """Mark the current task as done and remove it."""
+        self._active_task = None
+        self._active_task_set_by = "caregiver"
+        memory.store("active_patient_task", {})
 
     def process(self, frame: np.ndarray) -> None:
         """
@@ -105,11 +122,13 @@ class SituationGrounder:
             self._still_frames = 0  # reset so it doesn't fire every frame
             return True
 
-        # ── Signal 2: oscillating motion (back-and-forth) ─────────────────
+        # ── Signal 2: oscillating motion (back-and-forth head turning) ───────
+        # Count how many times the motion score crosses the threshold boundary.
+        # e.g. still → moving → still → moving → still = 4 transitions = confused pacing.
         if len(self._motion_history) == 10:
-            diffs = [abs(self._motion_history[i] - self._motion_history[i - 1]) for i in range(1, 10)]
-            oscillations = sum(1 for i in range(1, len(diffs)) if (diffs[i] > MOTION_THRESHOLD) != (diffs[i - 1] > MOTION_THRESHOLD))
-            if oscillations >= 5:  # 5+ direction reversals = confused pacing
+            above = [s > MOTION_THRESHOLD for s in self._motion_history]
+            transitions = sum(1 for i in range(1, len(above)) if above[i] != above[i - 1])
+            if transitions >= OSCILLATION_TRANSITIONS:
                 return True
 
         return False
@@ -176,31 +195,34 @@ class SituationGrounder:
     ) -> str:
         """Generate a calm grounding message via Gemini."""
         who_is_home = household_context.get("who_is_home", "")
-        task_line = f"\nCurrent task they should be doing: {self._active_task}" if self._active_task else ""
+        if self._active_task:
+            task_line = f"\nCurrent task set by {self._active_task_set_by}: {self._active_task}"
+        else:
+            task_line = ""
         context_line = f"\nRecent events: {recent_context}" if recent_context else ""
 
         if not gemini:
             base = f"You're at home in the {scene}. It's {time_str}."
             if self._active_task:
-                base += f" You were going to {self._active_task}."
+                base += f" {self._active_task_set_by} asked you to {self._active_task}."
             return base
 
-        prompt = f"""You are a gentle AI assistant helping a person with dementia feel calm and oriented.
+        prompt = f"""You are a gentle, warm AI companion helping {settings.patient_name}, a person with dementia, feel calm and oriented.
 
 Current scene: {scene}
 Current time: {time_str}
 Who is home: {who_is_home if who_is_home else "unknown"}{task_line}{context_line}
-Patient's name: {settings.patient_name}
 
 Write a calm, grounding message (1-3 sentences) that:
-- Tells them where they are
-- Tells them what time / day it is
-- If there's a task, gently reminds them what they were going to do
-- If someone is home, mentions them
-- Sounds warm and natural, NOT robotic
-- Is under 40 words
+- Opens by warmly telling them where they are (use their name once)
+- Tells them what time / day it is in natural language ("It's Thursday afternoon")
+- If someone is home, mentions them naturally ("David is in the kitchen")
+- If there's a task, gently reminds them using the name of who set it ("Your daughter Sarah asked you to...")
+- Sounds like a caring family member speaking softly — warm and natural, never robotic or clinical
+- Never mentions dementia, memory, or confusion
+- Is under 45 words
 
-Only output the message text."""
+Only output the message text. Nothing else."""
 
         try:
             return gemini.generate(prompt)
