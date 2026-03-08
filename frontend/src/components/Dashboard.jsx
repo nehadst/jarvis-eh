@@ -144,7 +144,9 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
 
         <div className="flex flex-col overflow-hidden border-l border-border">
           <EventFeed events={events} onPlayClip={handlePlayMedia} />
-          <TaskPanel />
+          <div className="flex-shrink-0 overflow-y-auto border-t border-border" style={{ maxHeight: "45%" }}>
+            <TaskPanel />
+          </div>
         </div>
       </div>
 

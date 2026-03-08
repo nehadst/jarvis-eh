@@ -141,9 +141,10 @@ class WanderingGuardian:
         try:
             return gemini.analyze_image(
                 frame,
-                "In 2-4 words, describe where this person is. "
-                "Examples: kitchen at home, living room, sidewalk outside, "
-                "street corner, park, store interior, parking lot. "
+                "Where is this person? If they are indoors at home, respond with ONLY one of these exact words: "
+                "kitchen, living room, bedroom, hallway, bathroom, dining room, office, study, porch, garage. "
+                "If they are clearly outside or in a public place (street, park, store, parking lot), "
+                "describe the outdoor location in 2-4 words. "
                 "Only output the location, nothing else.",
             ).lower().strip()
         except Exception:
