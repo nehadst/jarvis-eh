@@ -18,7 +18,13 @@ import threading
 from queue import Queue, Empty, Full
 from typing import Callable
 
+import cv2
+import numpy as np
+
 from config import settings
+from capture.frame_capture import FrameCapture
+from capture.glasses_capture import GlassesCapture
+from capture.mock_capture import MockCapture
 from features.face_recognition.recognizer import FaceRecognizer
 from features.situation_grounding.grounder import SituationGrounder
 from features.activity_continuity.tracker import ActivityTracker
@@ -56,14 +62,14 @@ except ImportError:
 
 
 class Orchestrator:
-    def __init__(self, event_callback: Callable[[dict], None] | None = None) -> None:
+    def __init__(self, event_callback: Callable[[dict], None] | None = None, capture=None) -> None:
         self.event_callback = event_callback or (lambda e: None)
         self.is_running = False
         self.active_task: str | None = None
-        self._latest_frame = None
+        self._latest_frame: np.ndarray | None = None
         self._frame_lock = threading.Lock()
         self.frame_id: int = 0
-        self._ai_queue: Queue = Queue(maxsize=2)
+        self._ai_queue: Queue[np.ndarray] = Queue(maxsize=2)
         self._ai_thread: threading.Thread | None = None
 
         # Feature modules
@@ -72,9 +78,10 @@ class Orchestrator:
         self.tracker = ActivityTracker(on_event=self.event_callback)
         self.guardian = WanderingGuardian(on_event=self.event_callback)
 
-        # Capture source
-        self._capture = None
-        if settings.capture_mode == "glasses" and GlassesCapture is not None:
+        # Capture source — allow explicit override (used by tests/VideoFileCapture)
+        if capture is not None:
+            self._capture = capture
+        elif settings.capture_mode == "glasses" and GlassesCapture is not None:
             self._capture = GlassesCapture(
                 host=settings.glasses_ws_host,
                 port=settings.glasses_ws_port,
@@ -83,6 +90,8 @@ class Orchestrator:
             self._capture = MockCapture()
         elif FrameCapture is not None:
             self._capture = FrameCapture()
+        else:
+            self._capture = None
 
         if self._capture is None:
             logger.warning(
@@ -182,10 +191,8 @@ class Orchestrator:
 
     def get_latest_jpeg(self) -> bytes | None:
         """Return the latest frame as JPEG bytes with face overlay (thread-safe)."""
-        if not _cv2_available:
-            return None
         # Glasses mode (H.264): get decoded numpy frame directly
-        if self._capture is not None and hasattr(self._capture, 'get_latest_frame'):
+        if hasattr(self._capture, 'get_latest_frame'):
             frame = self._capture.get_latest_frame()
         else:
             # Screen/webcam/video: read from orchestrator's own buffer
@@ -193,23 +200,37 @@ class Orchestrator:
                 frame = self._latest_frame
         if frame is None:
             return None
+        frame = self.face_recognizer.draw_overlay(frame)
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return buf.tobytes()
 
     def wait_for_frame(self, timeout: float = 0.1) -> bool:
         """Block until a new frame arrives from the capture source."""
-        if self._capture is not None and hasattr(self._capture, 'wait_for_frame'):
+        if hasattr(self._capture, 'wait_for_frame'):
             return self._capture.wait_for_frame(timeout)
         return True  # screen capture: just return immediately
 
     @property
     def stream_frame_id(self) -> int:
         """Frame ID that updates the instant a new frame arrives (not gated by AI queue)."""
-        if self._capture is not None and hasattr(self._capture, 'frame_id'):
+        if hasattr(self._capture, 'frame_id'):
             return self._capture.frame_id
         return self.frame_id
 
     def stop(self) -> None:
         self.is_running = False
-        if self._capture is not None:
-            self._capture.stop()
+        self._capture.stop()
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _count_faces(frame) -> int:
+        """Fast haar-cascade face count for conversation detection."""
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+        )
+        return len(faces)

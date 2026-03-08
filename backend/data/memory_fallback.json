@@ -1,0 +1,90 @@
+{
+  "last_activity": {
+    "time": 1772936661.50768,
+    "activity": "painting a wall",
+    "location_hint": "blue tape on the bottom left"
+  },
+  "continuity_reminders": [
+    {
+      "timestamp": 45.0,
+      "activity": "watching tv",
+      "message": "That's what you were doing. Let's get back to it."
+    },
+    {
+      "timestamp": 45.0,
+      "activity": "watching tv",
+      "message": "That's what you were doing. Let's get back to it."
+    },
+    {
+      "timestamp": 45.0,
+      "activity": "watching tv",
+      "message": "That's what you were doing. Let's get back to it."
+    },
+    {
+      "timestamp": 1772930783.218814,
+      "activity": "writing",
+      "message": "Nehad, you were writing. Your pen is right here."
+    },
+    {
+      "timestamp": 1772930980.4075446,
+      "activity": "writing",
+      "message": "Nehad, you were writing. Your pen is right here."
+    },
+    {
+      "timestamp": 1772932545.280059,
+      "activity": "writing a question",
+      "message": "Nehad, you were just writing a question, dear. Your pen is right here."
+    },
+    {
+      "timestamp": 1772933064.7482111,
+      "activity": "writing",
+      "message": "Nehad, it looks like you were writing. Your pen is right here."
+    },
+    {
+      "timestamp": 1772934784.276199,
+      "activity": "solving a rubik's cube",
+      "message": "Nehad, you were working on your Rubik's cube. It's right here beside you."
+    },
+    {
+      "timestamp": 1772935627.2858536,
+      "activity": "speaking into a microphone",
+      "message": "Hashim, you were speaking into your microphone. It's right there on your shirt."
+    },
+    {
+      "timestamp": 1772935785.4350157,
+      "activity": "talking to the camera",
+      "message": "Hashim, remember you were talking to your special camera friend. It's right there on your shirt."
+    },
+    {
+      "timestamp": 1772936136.4439223,
+      "activity": "playing a rubik's cube",
+      "message": "Hashim, you were so focused on your Rubik's cube. It's right here beside you."
+    },
+    {
+      "timestamp": 1772936653.43794,
+      "activity": "solving a rubik's cube",
+      "message": "Hashim, you were working on your Rubik's cube right here on the table. Would you like to try a move?"
+    }
+  ],
+  "active_patient_task": {
+    "task": "data\\test_videos\\WhatsApp Video 2026-03-07 at 3.05.34 PM.mp4",
+    "set_by": "caregiver"
+  },
+  "wandering_events": [
+    {
+      "timestamp": 1772924878.7216175,
+      "scene": "hotel front desk",
+      "message": "Nehad, honey, let's go back to the house, I've got your favorite tea waiting."
+    },
+    {
+      "timestamp": 1772930167.945757,
+      "scene": "hotel reception desk",
+      "message": "Nehad, let's get you home to your cozy chair."
+    },
+    {
+      "timestamp": 1772930331.4065082,
+      "scene": "hotel reception area",
+      "message": "Nehad, let's go back to your cozy home now."
+    }
+  ]
+}

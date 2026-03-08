@@ -72,3 +72,52 @@ class FrameCapture:
 
     def stop(self) -> None:
         self._running = False
+
+
+class VideoFileCapture:
+    """
+    Replays a video file as a frame source, at a controlled FPS.
+    Provides the same frames() / stop() interface as FrameCapture so the
+    Orchestrator works identically with a video file or live screen capture.
+
+    Usage:
+        cap = VideoFileCapture("path/to/video.mp4", fps=2.0)
+        for frame in cap.frames():
+            process(frame)
+    """
+
+    def __init__(self, video_path: str, fps: float = 2.0) -> None:
+        self.video_path = video_path
+        self.interval = 1.0 / fps
+        self._running = False
+
+    def frames(self):
+        cap = cv2.VideoCapture(self.video_path)
+        if not cap.isOpened():
+            raise FileNotFoundError(f"Cannot open video file: {self.video_path}")
+
+        video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / video_fps
+        print(f"[VideoFileCapture] {self.video_path}")
+        print(f"  {total_frames} frames @ {video_fps:.1f} fps = {duration:.1f}s video")
+        print(f"  Sampling at {1/self.interval:.1f} FPS (every {video_fps//(1/self.interval):.0f} video frames)\n")
+
+        # How many video frames to skip between each sample
+        step = max(1, int(video_fps / (1.0 / self.interval)))
+
+        self._running = True
+        frame_idx = 0
+        while self._running:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if not ret:
+                break  # End of video
+            yield frame
+            frame_idx += step
+            time.sleep(self.interval)
+
+        cap.release()
+
+    def stop(self) -> None:
+        self._running = False

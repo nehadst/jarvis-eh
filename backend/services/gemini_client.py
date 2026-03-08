@@ -56,7 +56,20 @@ class GeminiClient:
     def __init__(self) -> None:
         import google.generativeai as genai
         genai.configure(api_key=settings.gemini_api_key)
-        self._model = genai.GenerativeModel("gemini-2.0-flash")
+        # Prefer model from settings but provide sensible fallbacks for new users
+        preferred = getattr(settings, "gemini_model", "gemini-2.5-flash-lite")
+        fallback_list = [preferred, "gemini-2.5-flash-lite", "gemini-2.1-flash", "gemini-1.5-flash"]
+        last_exc = None
+        for model_name in fallback_list:
+            try:
+                self._model = genai.GenerativeModel(model_name)
+                print(f"[GeminiClient] Using model: {model_name}")
+                break
+            except Exception as e:
+                last_exc = e
+                continue
+        else:
+            raise last_exc
 
     def generate(self, prompt: str) -> str:
         response = self._model.generate_content(prompt)

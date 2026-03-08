@@ -11,6 +11,8 @@ class Settings(BaseSettings):
 
     # Google Gemini (fallback)
     gemini_api_key: str = ""
+    # Preferred Gemini model (update if older models are unavailable)
+    gemini_model: str = "gemini-2.5-flash-lite"
 
     # ElevenLabs
     elevenlabs_api_key: str = ""
@@ -53,7 +55,7 @@ class Settings(BaseSettings):
     port: int = 8000
     patient_name: str = "Dad"
 
-    model_config = {"env_file": "../.env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": "../.env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()
