@@ -63,42 +63,15 @@ export default function LiveStream({ captureRunning }) {
 
   if (!captureRunning) {
     return (
-      <div style={styles.placeholder}>
-        <span style={styles.placeholderText}>Start capture to see live feed</span>
+      <div className="flex items-center justify-center h-full" style={{ background: "oklch(0.08 0 0)" }}>
+        <span className="text-[15px] text-muted-foreground">Start capture to see live feed</span>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <canvas ref={canvasRef} style={styles.canvas} />
+    <div className="flex items-center justify-center bg-black overflow-hidden h-full">
+      <canvas ref={canvasRef} className="max-w-full max-h-full object-contain" />
     </div>
   );
 }
-
-const styles = {
-  container: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#000",
-    overflow: "hidden",
-    height: "100%",
-  },
-  canvas: {
-    maxWidth: "100%",
-    maxHeight: "100%",
-    objectFit: "contain",
-  },
-  placeholder: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#0a0a0f",
-    height: "100%",
-  },
-  placeholderText: {
-    color: "#555",
-    fontSize: 16,
-  },
-};
