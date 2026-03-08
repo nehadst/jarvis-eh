@@ -20,17 +20,17 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
   return (
     <div className="min-h-screen grid bg-background text-foreground" style={{ gridTemplateRows: "auto 1fr" }}>
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
+      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-card">
         <div className="flex items-center gap-3">
-          <span className="text-[15px] font-semibold tracking-widest text-muted-foreground uppercase">Rewind</span>
+          <span className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">Rewind</span>
           <span className="text-border">·</span>
           <span className="text-[17px] font-semibold tracking-tight text-foreground">Caregiver Dashboard</span>
         </div>
 
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-2.5 items-center">
           {/* Connection status */}
           <span
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 text-[13px] font-semibold"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold"
             style={connected ? {
               background: `color-mix(in oklch, ${C2} 12%, transparent)`,
               color: C2,
@@ -42,16 +42,16 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
             }}
           >
             <span
-              className="w-2 h-2"
+              className="w-1.5 h-1.5"
               style={{ background: connected ? C2 : "var(--destructive)" }}
             />
             {connected ? "Live" : "Disconnected"}
           </span>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-muted p-1">
+          <div className="flex gap-0.5 bg-muted p-0.5">
             <button
-              className={`px-4 py-2 text-[14px] font-semibold transition-all cursor-pointer border-none ${
+              className={`px-3.5 py-1.5 text-[13px] font-semibold transition-all cursor-pointer border-none ${
                 tab === "live"
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground bg-transparent"
@@ -61,7 +61,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
               Live
             </button>
             <button
-              className={`px-4 py-2 text-[14px] font-semibold transition-all cursor-pointer border-none ${
+              className={`px-3.5 py-1.5 text-[13px] font-semibold transition-all cursor-pointer border-none ${
                 tab === "family"
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground bg-transparent"
@@ -75,7 +75,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           {/* Glasses view link */}
           <Link
             to="/glasses"
-            className="px-4 py-2 text-[14px] font-semibold transition-colors"
+            className="px-3.5 py-1.5 text-[13px] font-semibold transition-colors"
             style={{
               color: "var(--primary-foreground)",
               background: "var(--primary)",
@@ -87,7 +87,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           {/* Mode selector */}
           {!captureRunning && (
             <select
-              className="px-3 py-2 text-[14px] font-semibold cursor-pointer outline-none bg-accent border border-border text-foreground"
+              className="px-2.5 py-1.5 text-[13px] font-semibold cursor-pointer outline-none bg-accent border border-border text-foreground"
               value={captureMode}
               onChange={(e) => onCaptureMode(e.target.value)}
             >
@@ -99,7 +99,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           {/* Capture toggle */}
           {captureRunning ? (
             <button
-              className="px-5 py-2 text-[14px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+              className="px-4 py-1.5 text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
               style={{ background: "var(--destructive)", color: "var(--primary-foreground)" }}
               onClick={onStopCapture}
             >
@@ -107,7 +107,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
             </button>
           ) : (
             <button
-              className="px-5 py-2 text-[14px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+              className="px-4 py-1.5 text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
               style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
               onClick={() => onStartCapture(captureMode)}
             >
