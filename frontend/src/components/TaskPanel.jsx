@@ -234,13 +234,21 @@ export default function TaskPanel() {
     const updated = [...customZones, zone];
     setCustomZones(updated);
     setNewZone("");
-    await setSafezones(updated).catch(() => {});
+    try {
+      await setSafezones(updated);
+    } catch {
+      setCustomZones(customZones); // rollback on network failure
+    }
   };
 
   const handleRemoveZone = async (zone) => {
     const updated = customZones.filter((z) => z !== zone);
     setCustomZones(updated);
-    await setSafezones(updated).catch(() => {});
+    try {
+      await setSafezones(updated);
+    } catch {
+      setCustomZones(customZones); // rollback on network failure
+    }
   };
 
   return (
