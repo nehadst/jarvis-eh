@@ -43,13 +43,28 @@ export async function addTask(task, setBy = "caregiver") {
 }
 
 /**
- * Trigger a memory montage for a family member.
+ * Trigger an encounter recording for a family member.
  * @param {string} personId
- * @param {string} [tag] - optional Cloudinary tag filter, e.g. "christmas"
  */
-export async function triggerMontage(personId, tag) {
-  const url = tag ? `/api/montage/${personId}?tag=${encodeURIComponent(tag)}` : `/api/montage/${personId}`;
-  const res = await fetch(url, { method: "POST" });
+export async function triggerEncounterRecording(personId) {
+  const res = await fetch(`/api/encounter/${personId}/record`, { method: "POST" });
+  return res.json();
+}
+
+/**
+ * Fetch encounter clips + snapshots for a specific person.
+ * @param {string} personId
+ */
+export async function fetchEncounters(personId) {
+  const res = await fetch(`/api/encounters/${personId}`);
+  return res.json();
+}
+
+/**
+ * Fetch recent encounters across all family members.
+ */
+export async function fetchAllEncounters() {
+  const res = await fetch("/api/encounters");
   return res.json();
 }
 

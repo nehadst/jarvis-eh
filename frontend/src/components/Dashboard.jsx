@@ -93,43 +93,13 @@ const styles = {
 };
 
 export default function Dashboard({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
-  // ID (timestamp) of the event the user explicitly clicked "Play" on
-  const [pinnedId, setPinnedId] = useState(null);
-  // Set of timestamps the user has dismissed — prevents auto-pop from reopening them
-  const [dismissedIds, setDismissedIds] = useState(() => new Set());
+  const [clipEvent, setClipEvent] = useState(null);
+  const [clipDismissed, setClipDismissed] = useState(false);
   const [tab, setTab] = useState("live"); // "live" | "family"
 
-  // Use a plain loop instead of Array.findLast (not available in older browsers)
-  const latestMontage = (() => {
-    for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].type === "montage_ready") return events[i];
-    }
-    return null;
-  })();
-
-  // Pinned event takes priority; otherwise auto-show latest unless dismissed
-  const activeMontage = (() => {
-    if (pinnedId) {
-      return events.find((e) => e.type === "montage_ready" && e.timestamp === pinnedId) ?? null;
-    }
-    if (latestMontage && !dismissedIds.has(latestMontage.timestamp)) {
-      return latestMontage;
-    }
-    return null;
-  })();
-
-  const handlePlayMontage = (event) => {
-    // Un-dismiss this event in case the user previously closed it
-    setDismissedIds((prev) => { const next = new Set(prev); next.delete(event.timestamp); return next; });
-    setPinnedId(event.timestamp);
-  };
-
-  const handleClose = () => {
-    if (activeMontage) {
-      setDismissedIds((prev) => new Set([...prev, activeMontage.timestamp]));
-    }
-    setPinnedId(null);
-  };
+  // Show the player when an encounter_clip_ready event arrives
+  const latestClip = events.findLast?.((e) => e.type === "encounter_clip_ready") ?? null;
+  const activeClip = clipDismissed ? null : (clipEvent ?? latestClip);
 
   return (
     <div style={styles.root}>
@@ -167,12 +137,12 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           <div style={{ overflowY: "auto" }}><FamilySetup /></div>
         )}
         <div style={styles.sidebar}>
-          <EventFeed events={events} onPlayMontage={handlePlayMontage} />
+          <EventFeed events={events} onPlayClip={(e) => { setClipEvent(e); setClipDismissed(false); }} />
           <TaskPanel />
         </div>
       </div>
 
-      <MontagePlayer event={activeMontage} onClose={handleClose} />
+      <MontagePlayer event={activeClip} onClose={() => { setClipEvent(null); setClipDismissed(true); }} />
     </div>
   );
 }

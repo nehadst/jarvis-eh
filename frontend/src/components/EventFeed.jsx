@@ -5,7 +5,8 @@ const TYPE_CONFIG = {
   wandering_detected: { label: "Wandering Alert", color: "#f87171", icon: "⚠️" },
   wandering_escalated: { label: "Wandering — Urgent", color: "#ef4444", icon: "🚨" },
   conversation_assist: { label: "Conversation Assist", color: "#a78bfa", icon: "💬" },
-  montage_ready: { label: "Montage Ready", color: "#60a5fa", icon: "🎬" },
+  encounter_recording_started: { label: "Recording", color: "#ef4444", icon: "🔴" },
+  encounter_clip_ready: { label: "Clip Ready", color: "#10b981", icon: "🎥" },
 };
 
 const styles = {
@@ -61,7 +62,7 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function EventCard({ event, onPlayMontage }) {
+function EventCard({ event, onPlayClip }) {
   const cfg = TYPE_CONFIG[event.type] || { label: event.type, color: "#9ca3af", icon: "•" };
   const message = event.whisper || event.message || "";
   const isUrgent = event.type === "wandering_escalated";
@@ -86,23 +87,37 @@ function EventCard({ event, onPlayMontage }) {
       )}
       {event.activity && <p style={styles.detail}>Activity: {event.activity}</p>}
       {event.confidence && <p style={styles.detail}>Confidence: {(event.confidence * 100).toFixed(1)}%</p>}
-      {event.type === "montage_ready" && event.montage_url && (
-        <button style={styles.playBtn} onClick={() => onPlayMontage?.(event)}>
-          Play Montage
-        </button>
+      {event.type === "encounter_clip_ready" && event.clip_url && (
+        <>
+          <button style={styles.playBtn} onClick={() => onPlayClip?.(event)}>
+            Play Clip
+          </button>
+          {event.snapshots?.length > 0 && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              {event.snapshots.map((url, i) => (
+                <img
+                  key={i}
+                  src={url}
+                  alt={`Snapshot ${i + 1}`}
+                  style={{ width: 80, height: 60, objectFit: "cover", borderRadius: 6, border: "1px solid #2d2d3d" }}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-export default function EventFeed({ events, onPlayMontage }) {
+export default function EventFeed({ events, onPlayClip }) {
   if (!events.length) {
     return <div style={styles.empty}>No events yet. Start capture to begin.</div>;
   }
   return (
     <div style={styles.container}>
       {events.map((e, i) => (
-        <EventCard key={i} event={e} onPlayMontage={onPlayMontage} />
+        <EventCard key={i} event={e} onPlayClip={onPlayClip} />
       ))}
     </div>
   );

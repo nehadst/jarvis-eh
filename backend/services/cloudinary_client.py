@@ -4,30 +4,21 @@ Cloudinary client — upload, fetch, and transform family media.
 Used for:
   - Storing the family photo album (tagged by person_id)
   - Uploading ElevenLabs narration audio
-  - Building a Ken Burns slideshow video from tagged photos with an audio overlay
-  - Eager-rendering the montage so playback is instant (not lazy on first request)
-
-Cloudinary transformation strategy per montage:
-  Each photo is individually turned into a 3-second zoompan (Ken Burns) clip,
-  then all clips are concatenated via fl_splice. The ElevenLabs narration mp3
-  is overlaid as an audio layer on the final video.
+  - Uploading encounter video clips and snapshot photos
 
 Usage:
     from services.cloudinary_client import cloud
 
     url = cloud.upload_photo("path/to/photo.jpg", person_id="sarah_johnson")
     audio_id = cloud.upload_audio("path/to/narration.mp3")
-    montage_url = cloud.build_montage_url(
-        person_id="sarah_johnson",
-        audio_public_id=audio_id,   # optional
-        tag_filter=None,            # pass e.g. "christmas" to filter by theme
-    )
+    result = cloud.upload_video("path/to/clip.mp4", person_id="sarah_johnson")
 """
 
 from __future__ import annotations
 
 import os
 import tempfile
+import time
 from typing import Optional
 
 import cloudinary
@@ -38,11 +29,6 @@ from config import settings
 
 
 class CloudinaryClient:
-    # Seconds each photo is shown in the slideshow
-    SLIDE_DURATION = 3
-    # Max photos per montage (keeps video under ~30s)
-    MAX_SLIDES = 8
-
     def __init__(self) -> None:
         if not settings.cloudinary_cloud_name:
             raise ValueError("Cloudinary credentials are not set in .env")
@@ -78,7 +64,7 @@ class CloudinaryClient:
     def upload_audio(self, file_path: str, label: str = "narration") -> str:
         """
         Upload an mp3 narration file to Cloudinary.
-        Returns the public_id (needed to overlay as audio on the montage video).
+        Returns the public_id.
         """
         result = cloudinary.uploader.upload(
             file_path,
@@ -152,110 +138,81 @@ class CloudinaryClient:
         )
         return url
 
-    # ── Montage builder ────────────────────────────────────────────────────────
+    # ── Encounter recording uploads ──────────────────────────────────────────
 
-    def build_montage_url(
+    def upload_video(
+        self,
+        file_path: str,
+        person_id: str,
+        extra_tags: list[str] | None = None,
+    ) -> dict:
+        """
+        Upload an encounter video clip (MP4) to Cloudinary.
+        Returns { secure_url, public_id }.
+        """
+        tags = [person_id, "encounter"] + (extra_tags or [])
+        result = cloudinary.uploader.upload(
+            file_path,
+            folder=f"{self._folder_prefix}/encounters/{person_id}",
+            tags=tags,
+            resource_type="video",
+        )
+        return {"secure_url": result["secure_url"], "public_id": result["public_id"]}
+
+    def upload_encounter_snapshot(
+        self,
+        frame_bytes: bytes,
+        person_id: str,
+        index: int,
+    ) -> dict:
+        """
+        Upload a JPEG snapshot from an encounter recording.
+        Returns { secure_url, public_id }.
+        """
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp.write(frame_bytes)
+            tmp_path = tmp.name
+        try:
+            tags = [person_id, "encounter", "snapshot"]
+            result = cloudinary.uploader.upload(
+                tmp_path,
+                folder=f"{self._folder_prefix}/encounters/{person_id}",
+                tags=tags,
+                resource_type="image",
+                public_id=f"snap_{index}_{int(time.time())}",
+            )
+            return {"secure_url": result["secure_url"], "public_id": result["public_id"]}
+        finally:
+            os.unlink(tmp_path)
+
+    def get_encounter_clips(
         self,
         person_id: str,
-        audio_public_id: Optional[str] = None,
-        tag_filter: Optional[str] = None,
-    ) -> str:
+        max_results: int = 20,
+    ) -> list[dict]:
         """
-        Build and return a Cloudinary video URL that plays a Ken Burns slideshow
-        of all photos tagged with person_id, with an optional narration audio track.
-
-        Each photo gets:
-          - fill crop at 1280x720, face-gravity centering
-          - e_zoompan:du_3  (3-second Ken Burns pan/zoom)
-          - fps_24 for smooth playback
-
-        All clips are spliced together. If audio_public_id is supplied, the
-        narration is overlaid as an audio layer.
-
-        The URL is eager-rendered (pre-generated) so the caregiver dashboard
-        can play it immediately without waiting for on-the-fly transcoding.
-
-        Returns the final mp4 URL, or "" if no photos are found.
-        """
-        photos = self.get_person_photos(person_id, tag_filter=tag_filter)
-        if not photos:
-            return ""
-
-        public_ids = [p["public_id"] for p in photos[: self.MAX_SLIDES]]
-
-        # ── Build the transformation chain ────────────────────────────────────
-        # Cloudinary concatenation pattern:
-        #   Start with photo[0], apply zoompan.
-        #   For each subsequent photo: splice it in as an overlay layer, then
-        #   apply zoompan to that slice, then fl_layer_apply.
-        # Simpler approach that Cloudinary supports directly:
-        #   Use the `multi` / slideshow approach with a manifest, OR
-        #   use the video concatenation (fl_splice) with image layers.
-        #
-        # We use the fl_splice + l_ layer approach which works server-side.
-
-        transformation: list[dict] = []
-
-        # Base clip — first photo
-        transformation.append({
-            "width": 1280,
-            "height": 720,
-            "crop": "fill",
-            "gravity": "face",
-            "effect": f"zoompan:du_{self.SLIDE_DURATION}",
-            "fps": 24,
-        })
-
-        # Splice in remaining photos
-        for pid in public_ids[1:]:
-            # Escape slashes in public_id for Cloudinary layer syntax
-            escaped = pid.replace("/", ":")
-            transformation.append({"overlay": escaped, "resource_type": "image"})
-            transformation.append({
-                "width": 1280,
-                "height": 720,
-                "crop": "fill",
-                "gravity": "face",
-                "effect": f"zoompan:du_{self.SLIDE_DURATION}",
-                "fps": 24,
-                "flags": "splice",
-            })
-            transformation.append({"flags": "layer_apply"})
-
-        # Overlay narration audio if provided
-        if audio_public_id:
-            escaped_audio = audio_public_id.replace("/", ":")
-            transformation.append({"overlay": f"video:{escaped_audio}"})
-            transformation.append({"flags": "layer_apply"})
-
-        url, _ = cloudinary_url(
-            public_ids[0],
-            resource_type="video",
-            format="mp4",
-            transformation=transformation,
-            secure=True,
-        )
-
-        # Eager-render: kick off server-side generation immediately
-        self._eager_render(public_ids[0], transformation)
-
-        return url
-
-    def _eager_render(self, public_id: str, transformation: list[dict]) -> None:
-        """
-        Tell Cloudinary to pre-generate the transformed video now rather than
-        on first playback request. Fires-and-forgets — errors are non-fatal.
+        Query Cloudinary for encounter clips tagged with person_id.
+        Returns list of { public_id, secure_url, created_at }.
         """
         try:
-            cloudinary.uploader.explicit(
-                public_id,
-                type="upload",
+            result = cloudinary.api.resources_by_tag(
+                person_id,
                 resource_type="video",
-                eager=transformation,
-                eager_async=True,
+                max_results=max_results,
             )
+            resources = result.get("resources", [])
+            return [
+                {
+                    "public_id": r["public_id"],
+                    "secure_url": r["secure_url"],
+                    "created_at": r.get("created_at"),
+                }
+                for r in resources
+                if "encounter" in r.get("tags", []) or f"encounters/{person_id}" in r.get("public_id", "")
+            ]
         except Exception as e:
-            print(f"[Cloudinary] Eager render warning (non-fatal): {e}")
+            print(f"[Cloudinary] get_encounter_clips error: {e}")
+            return []
 
 
 # Singleton — import this everywhere

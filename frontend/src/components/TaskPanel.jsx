@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
+import { addTask, fetchFamily, triggerEncounterRecording, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
 
 const styles = {
   panel: {
@@ -45,18 +45,6 @@ const styles = {
     fontSize: 14,
     fontFamily: "inherit",
     marginBottom: 8,
-  },
-  tagInput: {
-    width: "100%",
-    background: "#1a1a24",
-    border: "1px solid #2d2d3d",
-    borderRadius: 8,
-    color: "#e8e8f0",
-    padding: "10px 12px",
-    fontSize: 14,
-    fontFamily: "inherit",
-    marginBottom: 8,
-    boxSizing: "border-box",
   },
   btnSecondary: {
     width: "100%",
@@ -159,12 +147,11 @@ export default function TaskPanel() {
   const [grounding, setGrounding] = useState(false);
   const [groundingTriggered, setGroundingTriggered] = useState(false);
 
-  // Montage trigger state
+  // Encounter recording state
   const [family, setFamily] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState("");
-  const [tag, setTag] = useState("");
-  const [montaging, setMontaging] = useState(false);
-  const [montageSent, setMontageSent] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingSent, setRecordingSent] = useState(false);
 
   // Safe zones state — custom zones editable by caregiver
   const [customZones, setCustomZones] = useState([]);
@@ -216,15 +203,15 @@ export default function TaskPanel() {
     setTimeout(() => setSent(false), 3000);
   };
 
-  const handleMontage = async () => {
+  const handleRecordEncounter = async () => {
     if (!selectedPerson) return;
-    setMontaging(true);
+    setRecording(true);
     try {
-      await triggerMontage(selectedPerson, tag.trim() || undefined);
-      setMontageSent(true);
-      setTimeout(() => setMontageSent(false), 4000);
+      await triggerEncounterRecording(selectedPerson);
+      setRecordingSent(true);
+      setTimeout(() => setRecordingSent(false), 4000);
     } finally {
-      setMontaging(false);
+      setRecording(false);
     }
   };
 
@@ -341,11 +328,11 @@ export default function TaskPanel() {
         </div>
       </section>
 
-      {/* Memory Montage */}
+      {/* Record Encounter */}
       <section>
-        <p style={styles.heading}>Memory Montage</p>
+        <p style={styles.heading}>Record Encounter</p>
         <p style={{ ...styles.tip, marginBottom: 10 }}>
-          Generate a Ken Burns-style slideshow with AI narration for a family member.
+          Capture a 10-second clip + 3 snapshot photos of a real encounter with a family member.
         </p>
         {family.length === 0 ? (
           <p style={styles.tip}>No family profiles found.</p>
@@ -362,17 +349,10 @@ export default function TaskPanel() {
                 </option>
               ))}
             </select>
-            <input
-              style={styles.tagInput}
-              type="text"
-              placeholder="Optional tag (e.g. christmas)"
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-            />
-            <button style={styles.btnSecondary} onClick={handleMontage} disabled={montaging}>
-              {montaging ? "Building…" : "Generate Montage"}
+            <button style={styles.btnSecondary} onClick={handleRecordEncounter} disabled={recording}>
+              {recording ? "Starting…" : "Record Encounter"}
             </button>
-            {montageSent && <p style={styles.sending}>Building — watch the event feed.</p>}
+            {recordingSent && <p style={styles.sending}>Recording — watch the event feed.</p>}
           </>
         )}
       </section>
@@ -387,7 +367,8 @@ export default function TaskPanel() {
           <strong style={{ color: "#f87171" }}>Red</strong> — Wandering alert<br />
           <strong style={{ color: "#ef4444" }}>Bright red</strong> — Wandering escalated<br />
           <strong style={{ color: "#a78bfa" }}>Violet</strong> — Conversation assist<br />
-          <strong style={{ color: "#60a5fa" }}>Blue</strong> — Montage ready
+          <strong style={{ color: "#ef4444" }}>Red dot</strong> — Recording<br />
+          <strong style={{ color: "#10b981" }}>Teal</strong> — Clip ready
         </p>
       </section>
     </div>
