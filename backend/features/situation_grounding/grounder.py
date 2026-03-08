@@ -1,25 +1,27 @@
 """
 Feature 3 — Situation Grounding (Nehad)
 
-Detects signs of confusion or disorientation in the live feed and
-plays a calm grounding message: "You're at home in your living room.
-It's Thursday afternoon. David is in the kitchen making lunch."
+Monitors the egocentric camera feed (patient wears Meta glasses) for signs of
+confusion or task drift, and responds with gentle audio check-ins — never
+assuming confusion, always asking.
 
-Confusion signals detected:
-  - Repeated head turning (motion heuristics via frame diff)
-  - Slow / no movement for an extended period (stopped, looking lost)
-  - Caregiver manually triggers via dashboard
+Two parallel monitors:
+  A. Confusion check-in: egocentric scan pattern (optical flow) + LLM scene
+     assessment → if both signal confusion, plays "are you doing okay?"
+  B. Task monitoring: if a caregiver task is set, silently checks whether the
+     patient's view is relevant to the task. If off-task too long → gentle reminder.
 
-Also handles caregiver-set tasks:
-  "The patient should go to the fridge and grab an orange"
-  → grounding message includes the task reminder
+Full grounding messages (orienting speech) are caregiver-manual only via
+POST /api/grounding/trigger → trigger_manual().
 """
 
 from __future__ import annotations
 
+import json
 import time
 from collections import deque
 from datetime import datetime
+from enum import Enum
 from typing import Callable
 
 import cv2
@@ -31,30 +33,63 @@ from services.elevenlabs_client import tts
 from services.backboard_client import memory
 
 
-# How often (seconds) the same grounding message can repeat
+# ── State machine ─────────────────────────────────────────────────────────────
+
+class _State(Enum):
+    NORMAL = "normal"
+    CHECKING_IN = "checking_in"    # cooldown after confusion check-in
+    TASK_REMINDING = "task_remind" # cooldown after task reminder
+
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+
+# How often (seconds) the manual grounding message can repeat
 GROUNDING_COOLDOWN = 60
 
-# Motion delta threshold (sum of all 0/255 threshold pixels).
-# np.sum(thresh) = changed_pixel_count × 255, so 75_000 ≈ ~300 changed pixels
-# after a 21×21 Gaussian blur — below this the scene is essentially still.
-MOTION_THRESHOLD = 75_000
+# Egocentric scan pattern: direction reversals in SCAN_WINDOW frames = scanning
+SCAN_DIRECTION_CHANGES = 5
+SCAN_WINDOW = 10
 
-# How many consecutive low-motion frames before we flag as "stopped/lost"
-STILL_FRAME_LIMIT = 20  # ~10 seconds at 2 FPS
+# LLM confidence → suspicion score weight
+CONFIDENCE_WEIGHTS: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
 
-# How many above/below threshold transitions in the motion history = head-turning
-OSCILLATION_TRANSITIONS = 4  # 4 transitions in 10 frames (~5s) = confused pacing
+# Weighted score (scan + LLM) needed before check-in fires
+CHECKIN_THRESHOLD = 3
+
+# Seconds before confusion check-in can repeat
+CHECKIN_COOLDOWN = 120
+
+# Seconds patient can be off-task before reminder fires
+TASK_DRIFT_LIMIT = 60
+
+# Seconds before task reminder can repeat
+TASK_REMINDER_COOLDOWN = 90
+
+# Consecutive on-task LLM detections (after a reminder) before we consider task complete
+ON_TASK_COMPLETION_FRAMES = 3
 
 
 class SituationGrounder:
     def __init__(self, on_event: Callable[[dict], None] | None = None) -> None:
         self.on_event = on_event or (lambda e: None)
-        self._prev_frame: np.ndarray | None = None
-        self._still_frames = 0
-        self._motion_history: deque = deque(maxlen=10)
         self._last_grounded = 0.0
         self._active_task: str | None = None
         self._active_task_set_by: str = "caregiver"
+
+        # State machine
+        self._state: _State = _State.NORMAL
+        self._suspicion_score: int = 0
+        self._last_checkin: float = 0.0
+
+        # Task drift tracking
+        self._last_on_task_time: float = time.time()
+        self._last_task_reminder: float = 0.0
+        self._prior_activity: str | None = None   # what patient was doing before task reminder
+        self._on_task_streak: int = 0             # consecutive on-task LLM detections
+
+        # Egocentric scan tracking (optical flow)
+        self._prev_gray: np.ndarray | None = None
+        self._direction_history: deque = deque(maxlen=SCAN_WINDOW)
 
         # Restore any task that was set before a server restart
         saved = memory.retrieve("active_patient_task")
@@ -68,6 +103,10 @@ class SituationGrounder:
         """Called by the orchestrator when a caregiver adds a task via the dashboard."""
         self._active_task = task
         self._active_task_set_by = set_by
+        self._last_on_task_time = time.time()  # reset drift clock
+        self._last_task_reminder = 0.0          # allow reminder soon after task is set
+        self._prior_activity = None
+        self._on_task_streak = 0
         memory.store("active_patient_task", {"task": task, "set_by": set_by})
 
     def clear_active_task(self) -> None:
@@ -78,60 +117,279 @@ class SituationGrounder:
 
     def process(self, frame: np.ndarray) -> None:
         """
-        Analyse the frame for confusion/disorientation signals.
-        Fires a grounding event if triggered.
+        Two parallel monitors:
+          B (higher priority): task engagement check when a task is active
+          A: confusion scan pattern + LLM egocentric assessment
+        Fires gentle audio check-ins only — never assumes confusion, never auto-grounds.
         """
-        confusion_detected = self._analyse_motion(frame)
-        if confusion_detected:
-            self._trigger_grounding(frame)
+        now = time.time()
+
+        # ── Monitor B: Task Engagement ────────────────────────────────────────
+        if self._active_task and self._state == _State.NORMAL:
+            on_task = self._check_task_engagement(frame)
+            if on_task:
+                self._last_on_task_time = now
+                self._on_task_streak += 1
+                # Completion: sustained on-task after a reminder was given
+                if self._on_task_streak >= ON_TASK_COMPLETION_FRAMES and self._last_task_reminder > 0:
+                    self._on_task_completed()
+            else:
+                self._on_task_streak = 0
+                if now - self._last_on_task_time >= TASK_DRIFT_LIMIT:
+                    if now - self._last_task_reminder >= TASK_REMINDER_COOLDOWN:
+                        self._do_task_reminder()
+                        self._last_task_reminder = now
+                        self._last_on_task_time = now  # reset drift clock
+                        self._state = _State.TASK_REMINDING
+
+        # ── Monitor A: Confusion Check-In ─────────────────────────────────────
+        if self._state == _State.NORMAL:
+            scan_active = self._detect_scan_pattern(frame)
+            assessment = self._assess_confusion_egocentric(frame)
+            confused_llm = assessment.get("confused", False)
+            weight = CONFIDENCE_WEIGHTS.get(assessment.get("confidence", "low"), 0) if confused_llm else 0
+            signal_weight = weight if (scan_active and confused_llm) else 0
+
+            if signal_weight > 0:
+                self._suspicion_score += signal_weight
+                if self._suspicion_score >= CHECKIN_THRESHOLD:
+                    self._do_checkin()
+                    self._state = _State.CHECKING_IN
+                    self._last_checkin = now
+                    self._suspicion_score = 0
+            else:
+                self._suspicion_score = max(0, self._suspicion_score - 1)
+
+        # ── Cooldown exits ────────────────────────────────────────────────────
+        elif self._state == _State.CHECKING_IN:
+            if now - self._last_checkin >= CHECKIN_COOLDOWN:
+                self._state = _State.NORMAL
+                self._suspicion_score = 0
+
+        elif self._state == _State.TASK_REMINDING:
+            if now - self._last_task_reminder >= TASK_REMINDER_COOLDOWN:
+                self._state = _State.NORMAL
 
     def trigger_manual(self, frame: np.ndarray) -> None:
-        """Caregiver manually triggers a grounding message from the dashboard."""
+        """Caregiver manually triggers a full grounding message from the dashboard."""
         self._trigger_grounding(frame, force=True)
 
-    # ── Private ───────────────────────────────────────────────────────────────
+    # ── Monitor A helpers ─────────────────────────────────────────────────────
 
-    def _analyse_motion(self, frame: np.ndarray) -> bool:
+    def _detect_scan_pattern(self, frame: np.ndarray) -> bool:
         """
-        Returns True when the heuristic detects a confusion-like motion pattern.
-        Patterns:
-          1. Very still for too long (person is stuck / lost)
-          2. Rapid back-and-forth motion oscillation (head turning, pacing)
+        Detect repeated left-right scanning from the egocentric camera using
+        horizontal optical flow. Returns True if direction has reversed
+        SCAN_DIRECTION_CHANGES times in the last SCAN_WINDOW frames.
+        Clinically validated: high turn rate = wandering/confusion indicator.
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+        gray = cv2.resize(gray, (160, 90))  # small for speed
 
-        if self._prev_frame is None:
-            self._prev_frame = gray
+        if self._prev_gray is None:
+            self._prev_gray = gray
             return False
 
-        diff = cv2.absdiff(self._prev_frame, gray)
-        _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
-        motion_score = int(np.sum(thresh))
+        flow = cv2.calcOpticalFlowFarneback(
+            self._prev_gray, gray, None,
+            pyr_scale=0.5, levels=3, winsize=15,
+            iterations=3, poly_n=5, poly_sigma=1.2, flags=0,
+        )
+        self._prev_gray = gray
 
-        self._motion_history.append(motion_score)
-        self._prev_frame = gray
+        mean_x = float(np.mean(flow[..., 0]))
+        if abs(mean_x) < 0.3:  # ignore micro-jitter
+            return False
 
-        # ── Signal 1: sustained stillness ────────────────────────────────
-        if motion_score < MOTION_THRESHOLD:
-            self._still_frames += 1
-        else:
-            self._still_frames = 0
+        self._direction_history.append(mean_x > 0)  # True=right, False=left
 
-        if self._still_frames >= STILL_FRAME_LIMIT:
-            self._still_frames = 0  # reset so it doesn't fire every frame
+        if len(self._direction_history) < SCAN_WINDOW:
+            return False
+
+        reversals = sum(
+            1 for i in range(1, len(self._direction_history))
+            if self._direction_history[i] != self._direction_history[i - 1]
+        )
+        return reversals >= SCAN_DIRECTION_CHANGES
+
+    def _assess_confusion_egocentric(self, frame: np.ndarray) -> dict:
+        """
+        Ask the LLM to assess the egocentric frame for confusion context cues:
+        transitional spaces, aimless framing, no task engagement.
+        Returns {"confused": bool, "confidence": "low"|"medium"|"high"}.
+        """
+        if not gemini:
+            return {"confused": False, "confidence": "low"}
+        try:
+            prompt = (
+                "This is a first-person camera view worn by a dementia patient on their glasses.\n"
+                "Assess whether the scene suggests the wearer might be confused or disoriented.\n\n"
+                "Look for:\n"
+                "- Camera is in a doorway, hallway, or junction (no clear destination visible)\n"
+                "- No clear task engagement (no hands on objects, no food prep, no TV)\n"
+                "- Scene appears aimless — just open space, not oriented toward anything\n\n"
+                "Respond with ONLY valid JSON (no markdown, no explanation):\n"
+                "{\"confused\": true or false, \"confidence\": \"low\" or \"medium\" or \"high\"}"
+            )
+            raw = gemini.analyze_image(frame, prompt)
+            clean = raw.strip().strip("```json").strip("```").strip()
+            return json.loads(clean)
+        except Exception as e:
+            print(f"[Grounder] Egocentric assessment failed: {e}")
+            return {"confused": False, "confidence": "low"}
+
+    def _do_checkin(self) -> None:
+        """Play a gentle 'are you okay?' — no grounding, no assumptions."""
+        name = settings.patient_name.split()[0]
+        msg = f"Hey {name}, are you doing okay? Do you need any help?"
+        if tts:
+            tts.speak(msg)
+        print("[Grounder] Confusion check-in played.")
+        self.on_event({"type": "confusion_checkin", "message": msg})
+
+    # ── Monitor B helpers ─────────────────────────────────────────────────────
+
+    def _check_task_engagement(self, frame: np.ndarray) -> bool:
+        """
+        Silently ask the LLM whether the first-person view is relevant to
+        the active task. Returns True (on-task or uncertain), False (clearly
+        off-task at medium/high confidence). Fails safe to True.
+        """
+        if not gemini or not self._active_task:
             return True
+        try:
+            prompt = (
+                f"The patient has been asked to: \"{self._active_task}\"\n\n"
+                "This is their first-person camera view (they wear the camera on glasses).\n"
+                "Is what they're currently looking at relevant to completing this task?\n"
+                "Consider: relevant objects, locations, or actions that would help them do it.\n\n"
+                "Respond with ONLY valid JSON (no markdown):\n"
+                "{\"on_task\": true or false, \"confidence\": \"low\" or \"medium\" or \"high\"}"
+            )
+            raw = gemini.analyze_image(frame, prompt)
+            clean = raw.strip().strip("```json").strip("```").strip()
+            result = json.loads(clean)
+            if not result.get("on_task", True) and result.get("confidence", "low") in ("medium", "high"):
+                return False
+            return True
+        except Exception as e:
+            print(f"[Grounder] Task engagement check failed: {e}")
+            return True  # fail safe: don't remind if unsure
 
-        # ── Signal 2: oscillating motion (back-and-forth head turning) ───────
-        # Count how many times the motion score crosses the threshold boundary.
-        # e.g. still → moving → still → moving → still = 4 transitions = confused pacing.
-        if len(self._motion_history) == 10:
-            above = [s > MOTION_THRESHOLD for s in self._motion_history]
-            transitions = sum(1 for i in range(1, len(above)) if above[i] != above[i - 1])
-            if transitions >= OSCILLATION_TRANSITIONS:
-                return True
+    def _do_task_reminder(self) -> None:
+        """
+        Play a gentle task reminder that weaves in what the patient was doing.
+        Saves the prior activity so we can redirect them back to it after completion.
+        """
+        name = settings.patient_name.split()[0]
+        setter = self._active_task_set_by
+        task = self._active_task
 
-        return False
+        # Grab what the patient was doing from the activity tracker's memory
+        last = memory.retrieve("last_activity")
+        if isinstance(last, dict) and last.get("activity") and last["activity"] != "unknown":
+            self._prior_activity = last["activity"]
+        else:
+            self._prior_activity = None
+
+        msg = self._generate_task_redirect_message(name, setter, task, self._prior_activity)
+        if tts:
+            tts.speak(msg)
+        print("[Grounder] Task reminder played.")
+        self.on_event({"type": "task_reminder", "task": task, "prior_activity": self._prior_activity, "message": msg})
+
+    def _generate_task_redirect_message(
+        self, name: str, setter: str, task: str, prior_activity: str | None
+    ) -> str:
+        """Generate a combined 'you were doing X, but please do Y first' message via Gemini."""
+        if not gemini:
+            if prior_activity:
+                return f"Hey {name}, you were {prior_activity}, but {setter} asked you to {task} first — can you do that, then come back to it?"
+            return f"Hey {name}, {setter} asked you to {task}. Are you still working on that?"
+
+        if prior_activity:
+            prompt = (
+                f"Write a gentle, warm 1-2 sentence message for {name}, a dementia patient.\n\n"
+                f"They were just doing: {prior_activity}\n"
+                f"Their caregiver {setter} has asked them to: {task}\n\n"
+                "The message should:\n"
+                "- Acknowledge what they were just doing\n"
+                "- Gently redirect them to the caregiver task\n"
+                "- Suggest they can return to their prior activity afterward\n"
+                "- Be warm, calm, and under 35 words\n"
+                "- Sound like a caring family member, not a robot\n\n"
+                "Only output the message text."
+            )
+        else:
+            prompt = (
+                f"Write a gentle, warm 1-2 sentence message for {name}, a dementia patient.\n\n"
+                f"Their caregiver {setter} has asked them to: {task}\n\n"
+                "The message should:\n"
+                "- Gently remind them of the task\n"
+                "- Ask if they need any help\n"
+                "- Be warm, calm, and under 25 words\n\n"
+                "Only output the message text."
+            )
+        try:
+            return gemini.generate(prompt)
+        except Exception:
+            if prior_activity:
+                return f"Hey {name}, you were {prior_activity}, but {setter} asked you to {task} first — can you do that, then come back?"
+            return f"Hey {name}, {setter} asked you to {task}. Do you need any help?"
+
+    def _on_task_completed(self) -> None:
+        """
+        Patient has been on-task long enough to consider the task done.
+        Clear it and optionally redirect them back to their prior activity.
+        """
+        name = settings.patient_name.split()[0]
+        task = self._active_task
+        prior = self._prior_activity
+
+        msg = self._generate_completion_message(name, task, prior)
+        if tts:
+            tts.speak(msg)
+        print("[Grounder] Task completion detected.")
+        self.on_event({"type": "task_completed", "task": task, "returning_to": prior, "message": msg})
+
+        # Clear the task state
+        self._active_task = None
+        self._active_task_set_by = "caregiver"
+        self._prior_activity = None
+        self._on_task_streak = 0
+        self._last_task_reminder = 0.0
+        memory.store("active_patient_task", {})
+
+    def _generate_completion_message(self, name: str, task: str, prior_activity: str | None) -> str:
+        """Generate a warm completion acknowledgment with optional redirect back to prior activity."""
+        if not gemini:
+            if prior_activity:
+                return f"Great job, {name}! Now you can get back to {prior_activity}."
+            return f"Great job, {name}!"
+
+        if prior_activity:
+            prompt = (
+                f"Write a warm, encouraging 1-2 sentence message for {name}, a dementia patient.\n\n"
+                f"They just completed: {task}\n"
+                f"Before that, they were doing: {prior_activity}\n\n"
+                "The message should:\n"
+                "- Briefly acknowledge they're done with the task\n"
+                "- Gently remind them they can now return to what they were doing before\n"
+                "- Be warm, encouraging, and under 25 words\n\n"
+                "Only output the message text."
+            )
+        else:
+            prompt = (
+                f"Write a warm, encouraging 1 sentence message for {name}, a dementia patient, "
+                f"who just completed: {task}. Be brief, warm, under 15 words. "
+                "Only output the message text."
+            )
+        try:
+            return gemini.generate(prompt)
+        except Exception:
+            if prior_activity:
+                return f"Great job, {name}! Now you can get back to {prior_activity}."
+            return f"Great job, {name}!"
 
     def _trigger_grounding(self, frame: np.ndarray, force: bool = False) -> None:
         """Build and deliver the grounding message."""
