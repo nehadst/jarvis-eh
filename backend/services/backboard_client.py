@@ -173,7 +173,7 @@ class BackboardClient:
             resp = requests.post(
                 f"{self.API_BASE}/assistants/{self._assistant_id}/threads",
                 headers=self._headers,
-                timeout=5,
+                timeout=3,
             )
             if not resp.ok:
                 print(f"[Backboard] Thread creation failed: {resp.status_code}")
@@ -193,7 +193,7 @@ class BackboardClient:
                     "memory": "Auto",
                     "stream": False,
                 },
-                timeout=15,
+                timeout=5,
             )
             if resp.ok:
                 data = resp.json()
@@ -234,12 +234,36 @@ class BackboardClient:
         now = datetime.now().strftime("%I:%M %p on %B %d")
         patient = settings.patient_name
 
+        if key.startswith("conversations_"):
+            person_id = key.replace("conversations_", "")
+            if isinstance(value, dict):
+                name = value.get("name", person_id)
+                relationship = value.get("relationship", "person")
+                summary = value.get("summary", "")
+                duration = value.get("duration_seconds", 0)
+                return (
+                    f"At {now}, {patient} had a {duration:.0f}-second conversation "
+                    f"with {name} (their {relationship}). Summary: {summary}"
+                )
+            return f"At {now}, {patient} had a conversation with {person_id}."
+
         if key.startswith("interactions_"):
             person_id = key.replace("interactions_", "")
             if isinstance(value, dict):
                 whisper = value.get("whisper", "")
-                return f"At {now}, {patient} recognized {person_id}. {whisper}"
+                transcript = value.get("transcript", "")
+                parts = [f"At {now}, {patient} recognized {person_id}. {whisper}"]
+                if transcript:
+                    parts.append(f"They were talking about: {transcript[:150]}")
+                return " ".join(parts)
             return f"At {now}, {patient} had an interaction with {person_id}."
+
+        if key == "activity_log":
+            if isinstance(value, dict):
+                activity = value.get("activity", "unknown")
+                hint = value.get("location_hint", "")
+                loc = f" Nearby: {hint}." if hint else ""
+                return f"At {now}, {patient} was {activity}.{loc}"
 
         if key == "last_activity":
             if isinstance(value, dict):
