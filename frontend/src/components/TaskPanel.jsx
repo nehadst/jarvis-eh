@@ -1,159 +1,33 @@
 import { useState, useEffect } from "react";
 import { addTask, fetchFamily, triggerEncounterRecording, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
 
-const styles = {
-  panel: {
-    borderLeft: "1px solid #1e1e2e",
-    background: "#13131a",
-    padding: 20,
-    display: "flex",
-    flexDirection: "column",
-    gap: 20,
-    overflowY: "auto",
-  },
-  heading: { fontSize: 14, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.08em" },
-  textarea: {
-    width: "100%",
-    background: "#1a1a24",
-    border: "1px solid #2d2d3d",
-    borderRadius: 8,
-    color: "#e8e8f0",
-    padding: "10px 12px",
-    fontSize: 14,
-    resize: "vertical",
-    minHeight: 80,
-    fontFamily: "inherit",
-  },
-  btn: {
-    width: "100%",
-    padding: "10px",
-    background: "#4f46e5",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 14,
-  },
-  select: {
-    width: "100%",
-    background: "#1a1a24",
-    border: "1px solid #2d2d3d",
-    borderRadius: 8,
-    color: "#e8e8f0",
-    padding: "10px 12px",
-    fontSize: 14,
-    fontFamily: "inherit",
-    marginBottom: 8,
-  },
-  btnSecondary: {
-    width: "100%",
-    padding: "10px",
-    background: "#1d4ed8",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 14,
-  },
-  input: {
-    width: "100%",
-    background: "#1a1a24",
-    border: "1px solid #2d2d3d",
-    borderRadius: 8,
-    color: "#e8e8f0",
-    padding: "10px 12px",
-    fontSize: 14,
-    fontFamily: "inherit",
-    boxSizing: "border-box",
-    marginBottom: 8,
-  },
-  btnGreen: {
-    width: "100%",
-    padding: "10px",
-    background: "#15803d",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 14,
-  },
-  success: { fontSize: 13, color: "#34d399", marginTop: 4 },
-  sending: { fontSize: 13, color: "#60a5fa", marginTop: 4 },
-  tip: { fontSize: 12, color: "#4b5563", lineHeight: 1.5 },
-  chipRow: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 8,
-  },
-  chip: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-    background: "#1a1a24",
-    border: "1px solid #2d2d3d",
-    borderRadius: 999,
-    padding: "3px 10px",
-    fontSize: 12,
-    color: "#e8e8f0",
-  },
-  chipRemove: {
-    background: "none",
-    border: "none",
-    color: "#6b7280",
-    cursor: "pointer",
-    fontSize: 13,
-    lineHeight: 1,
-    padding: 0,
-  },
-  addRow: {
-    display: "flex",
-    gap: 6,
-  },
-  addInput: {
-    flex: 1,
-    background: "#1a1a24",
-    border: "1px solid #2d2d3d",
-    borderRadius: 8,
-    color: "#e8e8f0",
-    padding: "8px 12px",
-    fontSize: 13,
-    fontFamily: "inherit",
-  },
-  addBtn: {
-    padding: "8px 14px",
-    background: "#374151",
-    color: "#e8e8f0",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 13,
-  },
-};
+const C1 = "oklch(0.81 0.117 11.638)";
+const C2 = "oklch(0.645 0.246 16.439)";
+const C3 = "oklch(0.586 0.253 17.585)";
+const C4 = "oklch(0.514 0.222 16.935)";
+const C5 = "oklch(0.455 0.188 13.697)";
+const CD = "oklch(0.704 0.191 22.216)";
+
+const inputCls = "w-full px-3 py-2.5 text-[13px] font-sans text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring transition-colors";
+const inputStyle = { background: "var(--muted)", border: "1px solid var(--border)" };
+
+const btnCls = "w-full py-2.5 text-[13px] font-medium cursor-pointer border-none transition-opacity hover:opacity-90";
 
 export default function TaskPanel() {
   const [task, setTask] = useState("");
   const [sent, setSent] = useState(false);
 
-  // Household context state
   const [whoIsHome, setWhoIsHome] = useState("");
   const [householdSaved, setHouseholdSaved] = useState(false);
 
-  // Manual grounding state
   const [grounding, setGrounding] = useState(false);
   const [groundingTriggered, setGroundingTriggered] = useState(false);
 
-  // Encounter recording state
   const [family, setFamily] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState("");
   const [recording, setRecording] = useState(false);
   const [recordingSent, setRecordingSent] = useState(false);
 
-  // Safe zones state — custom zones editable by caregiver
   const [customZones, setCustomZones] = useState([]);
   const [defaultZones, setDefaultZones] = useState([]);
   const [newZone, setNewZone] = useState("");
@@ -171,7 +45,6 @@ export default function TaskPanel() {
     getSafezones()
       .then((data) => {
         setCustomZones(data?.custom_zones || []);
-        // defaults = all_zones minus custom
         const all = data?.safe_zones || [];
         const custom = data?.custom_zones || [];
         setDefaultZones(all.filter((z) => !custom.includes(z)));
@@ -224,7 +97,7 @@ export default function TaskPanel() {
     try {
       await setSafezones(updated);
     } catch {
-      setCustomZones(customZones); // rollback on network failure
+      setCustomZones(customZones);
     }
   };
 
@@ -234,79 +107,103 @@ export default function TaskPanel() {
     try {
       await setSafezones(updated);
     } catch {
-      setCustomZones(customZones); // rollback on network failure
+      setCustomZones(customZones);
     }
   };
 
   return (
-    <div style={styles.panel}>
+    <div
+      className="flex flex-col gap-5 p-4 overflow-y-auto"
+      style={{ borderTop: "1px solid var(--border)", background: "var(--background)" }}
+    >
       {/* Who is Home */}
-      <section>
-        <p style={styles.heading}>Who is Home</p>
-        <p style={{ ...styles.tip, marginBottom: 10 }}>
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Who is Home</SectionLabel>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
           Names of people currently home. Used in grounding messages.
         </p>
         <input
-          style={styles.input}
+          className={inputCls}
+          style={inputStyle}
           type="text"
           placeholder="e.g. David, Sarah"
           value={whoIsHome}
           onChange={(e) => setWhoIsHome(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleHousehold()}
         />
-        <button style={styles.btn} onClick={handleHousehold}>Update</button>
-        {householdSaved && <p style={styles.success}>Saved!</p>}
+        <button
+          className={btnCls}
+          style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+          onClick={handleHousehold}
+        >
+          Update
+        </button>
+        {householdSaved && <p className="text-[12px]" style={{ color: C2 }}>Saved!</p>}
       </section>
 
+      <div className="border-t border-border" />
+
       {/* Caregiver Task */}
-      <section>
-        <p style={styles.heading}>Set Patient Task</p>
-        <p style={{ ...styles.tip, marginBottom: 10 }}>
-          Tell the patient what they should be doing right now. The AI will
-          include this in grounding messages.
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Set Patient Task</SectionLabel>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Tell the patient what they should be doing right now.
         </p>
         <textarea
-          style={styles.textarea}
+          className={inputCls}
+          style={{ ...inputStyle, minHeight: 72, resize: "vertical" }}
           placeholder="e.g. Go to the fridge and grab an orange"
           value={task}
           onChange={(e) => setTask(e.target.value)}
         />
-        <button style={styles.btn} onClick={handleSubmit}>
+        <button
+          className={btnCls}
+          style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+          onClick={handleSubmit}
+        >
           Send to Patient
         </button>
-        {sent && <p style={styles.success}>Task sent!</p>}
+        {sent && <p className="text-[12px]" style={{ color: C2 }}>Task sent!</p>}
       </section>
 
-      {/* Ground Now */}
-      <section>
-        <p style={styles.heading}>Manual Grounding</p>
-        <p style={{ ...styles.tip, marginBottom: 10 }}>
+      <div className="border-t border-border" />
+
+      {/* Manual Grounding */}
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Manual Grounding</SectionLabel>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
           Immediately play a grounding message for the patient.
         </p>
-        <button style={styles.btnGreen} onClick={handleGrounding} disabled={grounding}>
+        <button
+          className={btnCls}
+          style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+          onClick={handleGrounding}
+          disabled={grounding}
+        >
           {grounding ? "Triggering…" : "Ground Now"}
         </button>
-        {groundingTriggered && <p style={styles.success}>Triggered!</p>}
+        {groundingTriggered && <p className="text-[12px]" style={{ color: C2 }}>Triggered!</p>}
       </section>
 
+      <div className="border-t border-border" />
+
       {/* Safe Zones */}
-      <section>
-        <p style={styles.heading}>Safe Zones</p>
-        <p style={{ ...styles.tip, marginBottom: 10 }}>
-          Rooms where the patient is allowed to be. An alert fires when they
-          leave all safe zones for 3 consecutive checks.
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Safe Zones</SectionLabel>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Rooms where the patient is allowed. An alert fires when they leave all safe zones for 3 consecutive checks.
         </p>
-        {/* Built-in defaults — shown as read-only chips */}
-        <div style={styles.chipRow}>
+        <div className="flex flex-wrap gap-1.5">
           {defaultZones.map((z) => (
-            <span key={z} style={{ ...styles.chip, opacity: 0.45 }}>{z}</span>
+            <span key={z} className="inline-flex items-center px-2.5 py-1 text-[11px] text-muted-foreground opacity-45" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+              {z}
+            </span>
           ))}
-          {/* Custom caregiver-added zones — removable */}
           {customZones.map((z) => (
-            <span key={z} style={styles.chip}>
+            <span key={z} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-foreground" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
               {z}
               <button
-                style={styles.chipRemove}
+                className="bg-transparent border-none text-muted-foreground cursor-pointer text-[13px] leading-none p-0 hover:text-foreground"
                 onClick={() => handleRemoveZone(z)}
                 title={`Remove ${z}`}
               >
@@ -315,31 +212,41 @@ export default function TaskPanel() {
             </span>
           ))}
         </div>
-        <div style={styles.addRow}>
+        <div className="flex gap-1.5">
           <input
-            style={styles.addInput}
+            className={inputCls + " flex-1"}
+            style={inputStyle}
             type="text"
             placeholder="Add a room (e.g. garden)"
             value={newZone}
             onChange={(e) => setNewZone(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAddZone()}
           />
-          <button style={styles.addBtn} onClick={handleAddZone}>Add</button>
+          <button
+            className="px-3 py-2 text-[13px] font-medium cursor-pointer border-none transition-opacity hover:opacity-90"
+            style={{ background: "var(--accent)", color: "var(--foreground)" }}
+            onClick={handleAddZone}
+          >
+            Add
+          </button>
         </div>
       </section>
 
+      <div className="border-t border-border" />
+
       {/* Record Encounter */}
-      <section>
-        <p style={styles.heading}>Record Encounter</p>
-        <p style={{ ...styles.tip, marginBottom: 10 }}>
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Record Encounter</SectionLabel>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
           Capture a 10-second clip + 3 snapshot photos of a real encounter with a family member.
         </p>
         {family.length === 0 ? (
-          <p style={styles.tip}>No family profiles found.</p>
+          <p className="text-[11px] text-muted-foreground">No family profiles found.</p>
         ) : (
           <>
             <select
-              style={styles.select}
+              className={inputCls}
+              style={{ ...inputStyle, marginBottom: 0 }}
               value={selectedPerson}
               onChange={(e) => setSelectedPerson(e.target.value)}
             >
@@ -349,28 +256,55 @@ export default function TaskPanel() {
                 </option>
               ))}
             </select>
-            <button style={styles.btnSecondary} onClick={handleRecordEncounter} disabled={recording}>
+            <button
+              className={btnCls}
+              style={{
+                background: `color-mix(in oklch, ${C4} 15%, transparent)`,
+                color: C4,
+                border: `1px solid color-mix(in oklch, ${C4} 30%, transparent)`,
+              }}
+              onClick={handleRecordEncounter}
+              disabled={recording}
+            >
               {recording ? "Starting…" : "Record Encounter"}
             </button>
-            {recordingSent && <p style={styles.sending}>Recording — watch the event feed.</p>}
+            {recordingSent && <p className="text-[12px]" style={{ color: C4 }}>Recording — watch the event feed.</p>}
           </>
         )}
       </section>
 
-      {/* Hints */}
-      <section>
-        <p style={styles.heading}>Quick Reference</p>
-        <p style={styles.tip}>
-          <strong style={{ color: "#818cf8" }}>Purple</strong> — Face recognized<br />
-          <strong style={{ color: "#34d399" }}>Green</strong> — Situation grounding<br />
-          <strong style={{ color: "#fbbf24" }}>Yellow</strong> — Activity reminder<br />
-          <strong style={{ color: "#f87171" }}>Red</strong> — Wandering alert<br />
-          <strong style={{ color: "#ef4444" }}>Bright red</strong> — Wandering escalated<br />
-          <strong style={{ color: "#a78bfa" }}>Violet</strong> — Conversation assist<br />
-          <strong style={{ color: "#ef4444" }}>Red dot</strong> — Recording<br />
-          <strong style={{ color: "#10b981" }}>Teal</strong> — Clip ready
-        </p>
+      <div className="border-t border-border" />
+
+      {/* Quick Reference */}
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Quick Reference</SectionLabel>
+        <div className="flex flex-col gap-1">
+          {[
+            [C2, "Face recognized"],
+            [C1, "Situation grounding"],
+            [C3, "Activity reminder"],
+            [CD, "Wandering alert"],
+            [C4, "Conversation / Voice command"],
+            [C5, "Clip / Montage ready"],
+            [C1, "Check-in"],
+            [C3, "Task reminder"],
+            [C2, "Task complete"],
+          ].map(([color, label]) => (
+            <div key={label} className="flex items-center gap-2">
+              <span className="w-2 h-2 flex-shrink-0" style={{ background: color }} />
+              <span className="text-[11px] text-muted-foreground">{label}</span>
+            </div>
+          ))}
+        </div>
       </section>
     </div>
+  );
+}
+
+function SectionLabel({ children }) {
+  return (
+    <p className="text-[12px] font-medium uppercase tracking-widest text-foreground">
+      {children}
+    </p>
   );
 }

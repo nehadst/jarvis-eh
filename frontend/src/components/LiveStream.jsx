@@ -63,42 +63,31 @@ export default function LiveStream({ captureRunning }) {
 
   if (!captureRunning) {
     return (
-      <div style={styles.placeholder}>
-        <span style={styles.placeholderText}>Start capture to see live feed</span>
+      <div className="flex items-center justify-center h-full overflow-hidden" style={{ background: "oklch(0.08 0 0)" }}>
+        <span className="text-[16px] text-foreground">Start capture to see live feed</span>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <canvas ref={canvasRef} style={styles.canvas} />
+    <div className="relative flex items-center justify-center bg-black overflow-hidden h-full">
+      <canvas ref={canvasRef} className="max-w-full max-h-full object-contain" />
+      <div className="absolute bottom-6 right-6 flex items-center gap-2 z-10">
+        <span
+          className="w-2.5 h-2.5 rounded-full"
+          style={{
+            background: "oklch(0.455 0.188 13.697)",
+            boxShadow: "0 0 8px oklch(0.455 0.188 13.697)",
+            animation: "rewind-pulse 2s ease-in-out infinite",
+          }}
+        />
+        <span
+          className="text-[12px] font-medium uppercase tracking-widest"
+          style={{ color: "oklch(0.645 0.246 16.439)" }}
+        >
+          AI Active
+        </span>
+      </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#000",
-    overflow: "hidden",
-    height: "100%",
-  },
-  canvas: {
-    maxWidth: "100%",
-    maxHeight: "100%",
-    objectFit: "contain",
-  },
-  placeholder: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#0a0a0f",
-    height: "100%",
-  },
-  placeholderText: {
-    color: "#555",
-    fontSize: 16,
-  },
-};
