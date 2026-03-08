@@ -70,9 +70,10 @@ class WanderingGuardian:
 
         if is_safe:
             self._last_safe_scene = scene
-            # Reset episode if they've been safe long enough
-            if time.time() - self._last_unsafe_time > EPISODE_RESET_SECONDS:
+            # Reset episode if they've been safe long enough after a wandering episode
+            if self._last_unsafe_time > 0 and time.time() - self._last_unsafe_time > EPISODE_RESET_SECONDS:
                 self._alert_count = 0
+                self._last_unsafe_time = 0.0  # anchor reset so next episode starts fresh
                 self._scene_history.clear()
         else:
             self._last_unsafe_time = time.time()
