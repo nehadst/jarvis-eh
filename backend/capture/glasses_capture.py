@@ -13,6 +13,8 @@ Usage:
         process(frame)
 """
 
+from __future__ import annotations
+
 import asyncio
 import threading
 from queue import Queue, Empty

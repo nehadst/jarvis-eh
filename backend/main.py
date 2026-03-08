@@ -20,6 +20,8 @@ Endpoints:
   WS   /ws                         — real-time event stream to the dashboard
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import threading

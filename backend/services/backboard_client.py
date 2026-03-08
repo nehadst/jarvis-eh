@@ -19,6 +19,8 @@ Usage:
     context = memory.query("What has Dad been doing today?")   # semantic search
 """
 
+from __future__ import annotations
+
 import json
 import threading
 import time

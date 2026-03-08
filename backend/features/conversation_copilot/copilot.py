@@ -18,6 +18,8 @@ Audio capture:
 The copilot can be enabled/disabled via the dashboard.
 """
 
+from __future__ import annotations
+
 import queue
 import threading
 import time

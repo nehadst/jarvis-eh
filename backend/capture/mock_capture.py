@@ -7,6 +7,8 @@ Usage in .env:
     VIDEO_PATH=data/test_clips/face_test.mp4
 """
 
+from __future__ import annotations
+
 import time
 import cv2
 import numpy as np

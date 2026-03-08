@@ -11,6 +11,8 @@ Usage (from main.py):
     thread.start()
 """
 
+from __future__ import annotations
+
 import threading
 from queue import Queue, Empty, Full
 from typing import Callable
