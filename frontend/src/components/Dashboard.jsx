@@ -5,92 +5,9 @@ import TaskPanel from "./TaskPanel.jsx";
 import LiveStream from "./LiveStream.jsx";
 import MontagePlayer from "./MontagePlayer.jsx";
 import FamilySetup from "./FamilySetup.jsx";
+import { LightRays } from "./ui/light-rays.jsx";
 
-
-const styles = {
-  root: {
-    minHeight: "100vh",
-    display: "grid",
-    gridTemplateRows: "auto 1fr",
-    background: "#0f0f14",
-    color: "#e8e8f0",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "16px 24px",
-    borderBottom: "1px solid #1e1e2e",
-    background: "#13131a",
-  },
-  title: { fontSize: 22, fontWeight: 700, letterSpacing: "-0.5px" },
-  pill: (connected) => ({
-    padding: "4px 12px",
-    borderRadius: 999,
-    fontSize: 13,
-    fontWeight: 600,
-    background: connected ? "#14532d" : "#450a0a",
-    color: connected ? "#86efac" : "#fca5a5",
-  }),
-  controls: { display: "flex", gap: 10, alignItems: "center" },
-  modeSelect: {
-    padding: "6px 10px",
-    borderRadius: 8,
-    border: "1px solid #2d2d3d",
-    background: "#1a1a24",
-    color: "#e8e8f0",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    outline: "none",
-  },
-  tabBtn: (active) => ({
-    padding: "6px 14px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 13,
-    background: active ? "#4f46e5" : "#1a1a24",
-    color: active ? "#fff" : "#9ca3af",
-    transition: "background 0.15s",
-  }),
-  btn: (active) => ({
-    padding: "8px 18px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 14,
-    background: active ? "#dc2626" : "#16a34a",
-    color: "#fff",
-    transition: "opacity 0.15s",
-  }),
-  body: {
-    display: "grid",
-    gridTemplateColumns: "1fr 340px",
-    gap: 0,
-    height: "calc(100vh - 65px)",
-    overflow: "hidden",
-  },
-  sidebar: {
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    borderLeft: "1px solid #1e1e2e",
-  },
-  glassesLink: {
-    padding: "6px 14px",
-    borderRadius: 8,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#818cf8",
-    textDecoration: "none",
-    background: "rgba(79, 70, 229, 0.12)",
-    border: "1px solid rgba(79, 70, 229, 0.25)",
-    transition: "background 0.15s",
-  },
-};
+const C2 = "oklch(0.645 0.246 16.439)";
 
 export default function Dashboard({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
   // ID (timestamp) of the event the user explicitly clicked "Play" on
@@ -132,19 +49,76 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
   };
 
   return (
-    <div style={styles.root}>
-      <header style={styles.header}>
-        <span style={styles.title}>REWIND — Caregiver Dashboard</span>
-        <div style={styles.controls}>
-          <span style={styles.pill(connected)}>
-            {connected ? "● Live" : "○ Disconnected"}
+    <div className="relative h-screen grid bg-background text-foreground overflow-hidden" style={{ gridTemplateRows: "auto 1fr" }}>
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-background">
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] font-medium tracking-widest text-muted-foreground uppercase">Rewind</span>
+          <span className="text-border">·</span>
+          <span className="text-[17px] font-normal tracking-tight text-foreground">Caregiver Dashboard</span>
+        </div>
+
+        <div className="flex gap-2.5 items-center">
+          {/* Connection status */}
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium"
+            style={connected ? {
+              background: `color-mix(in oklch, ${C2} 12%, transparent)`,
+              color: C2,
+              boxShadow: `0 0 0 1px color-mix(in oklch, ${C2} 25%, transparent)`,
+            } : {
+              background: "color-mix(in oklch, var(--destructive) 12%, transparent)",
+              color: "var(--destructive)",
+              boxShadow: "0 0 0 1px color-mix(in oklch, var(--destructive) 25%, transparent)",
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5"
+              style={{ background: connected ? C2 : "var(--destructive)" }}
+            />
+            {connected ? "Live" : "Disconnected"}
           </span>
-          <button style={styles.tabBtn(tab === "live")} onClick={() => setTab("live")}>Live</button>
-          <button style={styles.tabBtn(tab === "family")} onClick={() => setTab("family")}>Family Setup</button>
-          <Link to="/glasses" style={styles.glassesLink}>Glasses View →</Link>
+
+          {/* Tabs */}
+          <div className="flex gap-0.5 bg-muted p-0.5">
+            <button
+              className={`px-3.5 py-1.5 text-[13px] font-medium transition-all cursor-pointer border-none ${
+                tab === "live"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+              onClick={() => setTab("live")}
+            >
+              Live
+            </button>
+            <button
+              className={`px-3.5 py-1.5 text-[13px] font-medium transition-all cursor-pointer border-none ${
+                tab === "family"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+              onClick={() => setTab("family")}
+            >
+              Family Setup
+            </button>
+          </div>
+
+          {/* Glasses view link */}
+          <Link
+            to="/glasses"
+            className="px-3.5 py-1.5 text-[13px] font-medium transition-colors"
+            style={{
+              color: "var(--primary-foreground)",
+              background: "var(--primary)",
+            }}
+          >
+            Glasses View →
+          </Link>
+
+          {/* Mode selector */}
           {!captureRunning && (
             <select
-              style={styles.modeSelect}
+              className="px-2.5 py-1.5 text-[13px] font-medium cursor-pointer outline-none bg-accent border border-border text-foreground"
               value={captureMode}
               onChange={(e) => onCaptureMode(e.target.value)}
             >
@@ -152,27 +126,50 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
               <option value="webcam">Webcam</option>
             </select>
           )}
+
+          {/* Capture toggle */}
           {captureRunning ? (
-            <button style={styles.btn(true)} onClick={onStopCapture}>Stop Capture</button>
+            <button
+              className="px-4 py-1.5 text-[13px] font-medium cursor-pointer border-none transition-opacity hover:opacity-90"
+              style={{ background: "var(--destructive)", color: "var(--primary-foreground)" }}
+              onClick={onStopCapture}
+            >
+              Stop Capture
+            </button>
           ) : (
-            <button style={styles.btn(false)} onClick={() => onStartCapture(captureMode)}>Start Capture</button>
+            <button
+              className="px-4 py-1.5 text-[13px] font-medium cursor-pointer border-none transition-opacity hover:opacity-90"
+              style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+              onClick={() => onStartCapture(captureMode)}
+            >
+              Start Capture
+            </button>
           )}
         </div>
       </header>
 
-      <div style={styles.body}>
+      {/* Body */}
+      <div
+        className="relative grid overflow-hidden"
+        style={{ gridTemplateColumns: "1fr 340px", height: "calc(100vh - 57px)" }}
+      >
+        <LightRays color="oklch(0.645 0.246 16.439 / 0.08)" count={5} blur={50} speed={18} className="z-50" />
         {tab === "live" ? (
           <LiveStream captureRunning={captureRunning} />
         ) : (
-          <div style={{ overflowY: "auto" }}><FamilySetup /></div>
+          <div className="overflow-y-auto">
+            <FamilySetup />
+          </div>
         )}
-        <div style={styles.sidebar}>
+
+        <div className="flex flex-col overflow-hidden border-l border-border">
           <EventFeed events={events} onPlayMontage={handlePlayMontage} />
           <TaskPanel />
         </div>
       </div>
 
       <MontagePlayer event={activeMontage} onClose={handleClose} />
+
     </div>
   );
 }

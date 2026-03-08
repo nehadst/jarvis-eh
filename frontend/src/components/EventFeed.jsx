@@ -1,59 +1,22 @@
-const TYPE_CONFIG = {
-  face_recognized: { label: "Face Recognized", color: "#818cf8", icon: "👤" },
-  situation_grounding: { label: "Grounding", color: "#34d399", icon: "🏠" },
-  activity_continuity: { label: "Activity Reminder", color: "#fbbf24", icon: "🔄" },
-  wandering_detected: { label: "Wandering Alert", color: "#f87171", icon: "⚠️" },
-  wandering_escalated: { label: "Wandering — Urgent", color: "#ef4444", icon: "🚨" },
-  conversation_assist: { label: "Conversation Assist", color: "#a78bfa", icon: "💬" },
-  montage_ready: { label: "Montage Ready", color: "#60a5fa", icon: "🎬" },
-};
+// All colors are from the Lyra Rose palette (chart-1 through chart-5, primary, destructive)
+const C1 = "oklch(0.81 0.117 11.638)";   // chart-1 — light rose
+const C2 = "oklch(0.645 0.246 16.439)";  // chart-2 — medium rose
+const C3 = "oklch(0.586 0.253 17.585)";  // chart-3 — deeper rose
+const C4 = "oklch(0.514 0.222 16.935)";  // chart-4 — dark rose
+const C5 = "oklch(0.455 0.188 13.697)";  // chart-5 — darkest rose
+const CD = "oklch(0.704 0.191 22.216)";  // destructive — bright red-rose
 
-const styles = {
-  container: {
-    overflowY: "auto",
-    padding: 20,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  empty: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "100%",
-    color: "#4b5563",
-    fontSize: 15,
-  },
-  card: (color, urgent) => ({
-    background: urgent ? "#1a0a0a" : "#1a1a24",
-    border: `1px solid ${color}${urgent ? "99" : "33"}`,
-    borderLeft: `3px solid ${color}`,
-    borderRadius: 10,
-    padding: "12px 16px",
-  }),
-  row: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 },
-  badge: (color) => ({
-    fontSize: 12,
-    fontWeight: 700,
-    color,
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-  }),
-  time: { fontSize: 11, color: "#6b7280", marginLeft: "auto" },
-  message: { fontSize: 14, lineHeight: 1.5, color: "#d1d5db" },
-  detail: { fontSize: 12, color: "#6b7280", marginTop: 4 },
-  playBtn: {
-    display: "inline-block",
-    marginTop: 8,
-    padding: "4px 12px",
-    background: "#1d4ed8",
-    color: "#bfdbfe",
-    border: "none",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontSize: 12,
-    fontWeight: 600,
-  },
+const TYPE_CONFIG = {
+  face_recognized:    { label: "Face Recognized",    color: C2, icon: "👤" },
+  situation_grounding:{ label: "Grounding",           color: C1, icon: "🏠" },
+  activity_continuity:{ label: "Activity Reminder",   color: C3, icon: "🔄" },
+  wandering_detected: { label: "Wandering Alert",     color: CD, icon: "⚠️" },
+  wandering_escalated:{ label: "Wandering — Urgent",  color: CD, icon: "🚨" },
+  conversation_assist:{ label: "Conversation Assist", color: C4, icon: "💬" },
+  montage_ready:      { label: "Montage Ready",       color: C5, icon: "🎬" },
+  confusion_checkin:  { label: "Check-In",            color: C1, icon: "💭" },
+  task_reminder:      { label: "Task Reminder",       color: C3, icon: "📋" },
+  task_completed:     { label: "Task Complete",       color: C2, icon: "✅" },
 };
 
 function formatTime(iso) {
@@ -62,33 +25,72 @@ function formatTime(iso) {
 }
 
 function EventCard({ event, onPlayMontage }) {
-  const cfg = TYPE_CONFIG[event.type] || { label: event.type, color: "#9ca3af", icon: "•" };
+  const cfg = TYPE_CONFIG[event.type] || { label: event.type, color: "var(--muted-foreground)", icon: "•" };
   const message = event.whisper || event.message || "";
   const isUrgent = event.type === "wandering_escalated";
 
   return (
-    <div style={styles.card(cfg.color, isUrgent)}>
-      <div style={styles.row}>
-        <span>{cfg.icon}</span>
-        <span style={styles.badge(cfg.color)}>{cfg.label}</span>
-        {event.person && <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>— {event.person}</span>}
-        <span style={styles.time}>{formatTime(event.timestamp)}</span>
+    <div
+      className="p-3.5"
+      style={{
+        background: isUrgent ? `color-mix(in oklch, ${CD} 8%, var(--card))` : "var(--card)",
+        border: `1px solid ${isUrgent ? `color-mix(in oklch, ${CD} 40%, transparent)` : "var(--border)"}`,
+        borderLeft: `3px solid ${cfg.color}`,
+      }}
+    >
+      {/* Row: icon + badge + person + time */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-sm leading-none">{cfg.icon}</span>
+        <span
+          className="text-[11px] font-bold uppercase tracking-wider"
+          style={{ color: cfg.color }}
+        >
+          {cfg.label}
+        </span>
+        {event.person && (
+          <span className="text-[12px] font-semibold text-foreground">— {event.person}</span>
+        )}
+        <span className="text-[10px] text-muted-foreground ml-auto tabular-nums">
+          {formatTime(event.timestamp)}
+        </span>
       </div>
-      {message && <p style={styles.message}>"{message}"</p>}
-      {event.scene && <p style={styles.detail}>Scene: {event.scene}</p>}
+
+      {/* Message */}
+      {message && (
+        <p className="text-[13px] leading-relaxed text-foreground/80">"{message}"</p>
+      )}
+
+      {/* Details */}
+      {event.scene && (
+        <p className="text-[11px] text-muted-foreground mt-1">Scene: {event.scene}</p>
+      )}
       {event.last_safe_scene && (
-        <p style={styles.detail}>Last safe location: {event.last_safe_scene}</p>
+        <p className="text-[11px] text-muted-foreground mt-1">Last safe location: {event.last_safe_scene}</p>
       )}
       {event.alert_count > 1 && (
-        <p style={{ ...styles.detail, color: "#f87171" }}>
-          Alert #{event.alert_count} in this episode
+        <p className="text-[11px] mt-1" style={{ color: CD }}>Alert #{event.alert_count} in this episode</p>
+      )}
+      {event.activity && (
+        <p className="text-[11px] text-muted-foreground mt-1">Activity: {event.activity}</p>
+      )}
+      {event.confidence && (
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Confidence: {(event.confidence * 100).toFixed(1)}%
         </p>
       )}
-      {event.activity && <p style={styles.detail}>Activity: {event.activity}</p>}
-      {event.confidence && <p style={styles.detail}>Confidence: {(event.confidence * 100).toFixed(1)}%</p>}
+
+      {/* Play montage button */}
       {event.type === "montage_ready" && event.montage_url && (
-        <button style={styles.playBtn} onClick={() => onPlayMontage?.(event)}>
-          Play Montage
+        <button
+          className="mt-2 px-3 py-1 text-[11px] font-semibold cursor-pointer transition-opacity hover:opacity-80"
+          style={{
+            background: `color-mix(in oklch, ${C5} 15%, transparent)`,
+            color: C5,
+            border: `1px solid color-mix(in oklch, ${C5} 30%, transparent)`,
+          }}
+          onClick={() => onPlayMontage?.(event)}
+        >
+          ▶ Play Montage
         </button>
       )}
     </div>
@@ -97,10 +99,15 @@ function EventCard({ event, onPlayMontage }) {
 
 export default function EventFeed({ events, onPlayMontage }) {
   if (!events.length) {
-    return <div style={styles.empty}>No events yet. Start capture to begin.</div>;
+    return (
+      <div className="flex items-center justify-center h-full text-foreground text-[14px]">
+        No events yet — start capture to begin.
+      </div>
+    );
   }
+
   return (
-    <div style={styles.container}>
+    <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-2.5">
       {events.map((e, i) => (
         <EventCard key={i} event={e} onPlayMontage={onPlayMontage} />
       ))}

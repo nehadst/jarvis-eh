@@ -349,8 +349,8 @@ const cssText = `
   to { opacity: 0; transform: scale(0.93); }
 }
 @keyframes amberPulse {
-  0%, 100% { box-shadow: 0 0 30px rgba(245, 158, 11, 0.1), 0 0 0 0.5px rgba(245, 158, 11, 0.15) inset; }
-  50% { box-shadow: 0 0 50px rgba(245, 158, 11, 0.25), 0 0 0 0.5px rgba(245, 158, 11, 0.3) inset; }
+  0%, 100% { box-shadow: 0 0 30px color-mix(in oklch, oklch(0.704 0.191 22.216) 10%, transparent), 0 0 0 0.5px color-mix(in oklch, oklch(0.704 0.191 22.216) 15%, transparent) inset; }
+  50% { box-shadow: 0 0 50px color-mix(in oklch, oklch(0.704 0.191 22.216) 25%, transparent), 0 0 0 0.5px color-mix(in oklch, oklch(0.704 0.191 22.216) 30%, transparent) inset; }
 }
 @keyframes hudFadeIn {
   from { opacity: 0; }
@@ -397,7 +397,7 @@ const styles = {
     width: 120,
     height: 120,
     borderRadius: "50%",
-    background: "radial-gradient(circle, #4f46e5 0%, transparent 70%)",
+    background: "radial-gradient(circle, oklch(0.455 0.188 13.697) 0%, transparent 70%)",
     animation: "rewind-orb 3s ease-in-out infinite",
   },
   idleText: {
@@ -449,8 +449,8 @@ const styles = {
     width: 8,
     height: 8,
     borderRadius: "50%",
-    background: connected ? "#22c55e" : "#ef4444",
-    boxShadow: connected ? "0 0 6px #22c55e" : "0 0 6px #ef4444",
+    background: connected ? "oklch(0.645 0.246 16.439)" : "oklch(0.704 0.191 22.216)",
+    boxShadow: connected ? "0 0 6px oklch(0.645 0.246 16.439)" : "0 0 6px oklch(0.704 0.191 22.216)",
   }),
   topRight: {
     display: "flex",
@@ -459,7 +459,7 @@ const styles = {
   },
   modeSelect: {
     padding: "5px 10px",
-    borderRadius: 6,
+    borderRadius: 0,
     border: "1px solid rgba(255,255,255,0.15)",
     background: "rgba(255,255,255,0.08)",
     color: "#e8e8f0",
@@ -470,12 +470,12 @@ const styles = {
   },
   captureBtn: (active) => ({
     padding: "6px 16px",
-    borderRadius: 6,
+    borderRadius: 0,
     border: "none",
     cursor: "pointer",
     fontWeight: 700,
     fontSize: 13,
-    background: active ? "#dc2626" : "#16a34a",
+    background: active ? "oklch(0.704 0.191 22.216)" : "oklch(0.455 0.188 13.697)",
     color: "#fff",
   }),
 
@@ -488,7 +488,7 @@ const styles = {
     alignItems: "center",
     gap: 8,
     padding: "8px 16px",
-    borderRadius: 12,
+    borderRadius: 0,
     background: "rgba(0, 0, 0, 0.35)",
     backdropFilter: "blur(20px)",
     WebkitBackdropFilter: "blur(20px)",
@@ -501,7 +501,7 @@ const styles = {
     width: 6,
     height: 6,
     borderRadius: "50%",
-    background: "#818cf8",
+    background: "oklch(0.645 0.246 16.439)",
     opacity: 0.7,
     flexShrink: 0,
   },
@@ -526,11 +526,11 @@ const styles = {
     alignItems: "center",
     gap: 10,
     padding: "8px 20px",
-    borderRadius: 14,
-    background: "rgba(79, 70, 229, 0.12)",
+    borderRadius: 0,
+    background: "color-mix(in oklch, oklch(0.455 0.188 13.697) 12%, transparent)",
     backdropFilter: "blur(20px)",
     WebkitBackdropFilter: "blur(20px)",
-    border: "1px solid rgba(79, 70, 229, 0.2)",
+    border: "1px solid color-mix(in oklch, oklch(0.455 0.188 13.697) 20%, transparent)",
     zIndex: 10,
     pointerEvents: "none",
     animation: "taskSlideIn 0.3s ease forwards",
@@ -539,7 +539,7 @@ const styles = {
     fontSize: 11,
     fontWeight: 700,
     letterSpacing: "0.08em",
-    color: "#818cf8",
+    color: "oklch(0.645 0.246 16.439)",
     textTransform: "uppercase",
     flexShrink: 0,
   },
@@ -557,7 +557,7 @@ const styles = {
   faceCard: {
     width: 300,
     padding: "18px 20px",
-    borderRadius: 22,
+    borderRadius: 0,
     background: "rgba(255, 255, 255, 0.05)",
     backdropFilter: "blur(50px) saturate(200%)",
     WebkitBackdropFilter: "blur(50px) saturate(200%)",
@@ -579,12 +579,12 @@ const styles = {
     width: 48,
     height: 48,
     borderRadius: "50%",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    background: "linear-gradient(135deg, oklch(0.586 0.253 17.585) 0%, oklch(0.455 0.188 13.697) 100%)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    boxShadow: "0 2px 12px rgba(102, 126, 234, 0.25)",
+    boxShadow: "0 2px 12px color-mix(in oklch, oklch(0.586 0.253 17.585) 25%, transparent)",
   },
   faceCardInitials: {
     fontSize: 18,
@@ -627,11 +627,11 @@ const styles = {
   wanderingCard: {
     maxWidth: 440,
     padding: "28px 36px",
-    borderRadius: 26,
-    background: "rgba(120, 53, 15, 0.15)",
+    borderRadius: 0,
+    background: "color-mix(in oklch, oklch(0.704 0.191 22.216) 15%, transparent)",
     backdropFilter: "blur(50px) saturate(180%)",
     WebkitBackdropFilter: "blur(50px) saturate(180%)",
-    border: "1px solid rgba(245, 158, 11, 0.2)",
+    border: "1px solid color-mix(in oklch, oklch(0.704 0.191 22.216) 20%, transparent)",
     textAlign: "center",
     animation:
       "wanderingIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, " +
@@ -649,14 +649,14 @@ const styles = {
     width: 10,
     height: 10,
     borderRadius: "50%",
-    background: "#f59e0b",
-    boxShadow: "0 0 12px rgba(245, 158, 11, 0.5)",
+    background: "oklch(0.704 0.191 22.216)",
+    boxShadow: "0 0 12px color-mix(in oklch, oklch(0.704 0.191 22.216) 50%, transparent)",
   },
   wanderingLabel: {
     fontSize: 13,
     fontWeight: 700,
     letterSpacing: "0.06em",
-    color: "#fbbf24",
+    color: "oklch(0.704 0.191 22.216)",
     textTransform: "uppercase",
   },
   wanderingMessage: {
@@ -668,7 +668,7 @@ const styles = {
   },
   wanderingScene: {
     fontSize: 13,
-    color: "rgba(245, 158, 11, 0.5)",
+    color: "color-mix(in oklch, oklch(0.704 0.191 22.216) 50%, transparent)",
     marginTop: 14,
     textTransform: "capitalize",
   },
@@ -721,7 +721,7 @@ const styles = {
     maxWidth: 480,
     width: "90%",
     padding: "16px 22px",
-    borderRadius: 18,
+    borderRadius: 0,
     background: "rgba(255, 255, 255, 0.05)",
     backdropFilter: "blur(40px) saturate(180%)",
     WebkitBackdropFilter: "blur(40px) saturate(180%)",
@@ -741,15 +741,15 @@ const styles = {
     width: 8,
     height: 8,
     borderRadius: "50%",
-    background: "#22d3ee",
-    boxShadow: "0 0 8px rgba(34, 211, 238, 0.4)",
+    background: "oklch(0.586 0.253 17.585)",
+    boxShadow: "0 0 8px color-mix(in oklch, oklch(0.586 0.253 17.585) 40%, transparent)",
     flexShrink: 0,
   },
   activityLabel: {
     fontSize: 12,
     fontWeight: 700,
     letterSpacing: "0.06em",
-    color: "#22d3ee",
+    color: "oklch(0.586 0.253 17.585)",
     textTransform: "uppercase",
   },
   activityMessage: {
@@ -765,7 +765,7 @@ const styles = {
     maxWidth: 520,
     width: "90%",
     padding: "12px 22px",
-    borderRadius: 14,
+    borderRadius: 0,
     background: "rgba(255, 255, 255, 0.03)",
     backdropFilter: "blur(30px)",
     WebkitBackdropFilter: "blur(30px)",
@@ -806,14 +806,14 @@ const styles = {
     width: 10,
     height: 10,
     borderRadius: "50%",
-    background: "#4f46e5",
-    boxShadow: "0 0 8px #4f46e5",
+    background: "oklch(0.455 0.188 13.697)",
+    boxShadow: "0 0 8px oklch(0.455 0.188 13.697)",
     animation: "rewind-pulse 2s ease-in-out infinite",
   },
   aiText: {
     fontSize: 12,
     fontWeight: 700,
-    color: "#818cf8",
+    color: "oklch(0.645 0.246 16.439)",
     letterSpacing: "0.08em",
     textTransform: "uppercase",
   },
