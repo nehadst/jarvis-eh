@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from pydantic_settings import BaseSettings
 from pathlib import Path
 
 
 class Settings(BaseSettings):
-    # Google Gemini
+    # OpenAI (primary)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+
+    # Google Gemini (fallback)
     gemini_api_key: str = ""
 
     # ElevenLabs
@@ -17,19 +23,29 @@ class Settings(BaseSettings):
 
     # Backboard.io
     backboard_api_key: str = ""
-    backboard_project_id: str = ""
+    backboard_assistant_id: str = ""
 
-    # Screen capture (WhatsApp call window region)
+    # Capture source: "glasses" | "screen" | "webcam" | "video"
+    capture_mode: str = "glasses"
+
+    # Video file path (only used when capture_mode="video")
+    video_path: str = "data/test_clips/sample.mp4"
+
+    # Screen capture region (only used when capture_mode="screen")
     capture_left: int = 0
     capture_top: int = 0
     capture_width: int = 1280
     capture_height: int = 720
 
-    # Face recognition
+    # Meta glasses WebSocket (only used when capture_mode="glasses")
+    glasses_ws_host: str = "0.0.0.0"
+    glasses_ws_port: int = 8765
+
+    # Face recognition (InsightFace)
     face_db_path: str = "data/face_db"
-    face_model: str = "ArcFace"
-    face_detector: str = "retinaface"
-    face_distance_threshold: float = 0.4
+    face_model: str = "buffalo_sc"       # "buffalo_sc" (fast) or "buffalo_l" (more accurate)
+    face_det_size: int = 640             # detection input size — 640 is reliable, 320 is faster
+    face_similarity_threshold: float = 0.4  # cosine similarity — higher = stricter (0.3-0.6 range)
     face_cooldown_seconds: int = 30
 
     # App

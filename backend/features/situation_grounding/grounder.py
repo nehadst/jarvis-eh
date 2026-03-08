@@ -15,6 +15,8 @@ Also handles caregiver-set tasks:
   → grounding message includes the task reminder
 """
 
+from __future__ import annotations
+
 import time
 from collections import deque
 from datetime import datetime
@@ -126,8 +128,14 @@ class SituationGrounder:
         # Retrieve any household context from memory
         household_context = memory.retrieve("household_context") or {}
 
+        # Pull cross-feature context from Backboard semantic memory
+        recent_context = memory.query(
+            f"In 2-3 brief facts, what has {settings.patient_name} been doing "
+            "in the last hour? Include any visitors, activities, and tasks."
+        )
+
         # Build Gemini prompt
-        grounding_text = self._generate_grounding_message(scene, time_str, household_context)
+        grounding_text = self._generate_grounding_message(scene, time_str, household_context, recent_context)
 
         # Play via ElevenLabs
         if tts and grounding_text:
@@ -164,11 +172,12 @@ class SituationGrounder:
             return "a familiar room"
 
     def _generate_grounding_message(
-        self, scene: str, time_str: str, household_context: dict
+        self, scene: str, time_str: str, household_context: dict, recent_context: str = ""
     ) -> str:
         """Generate a calm grounding message via Gemini."""
         who_is_home = household_context.get("who_is_home", "")
         task_line = f"\nCurrent task they should be doing: {self._active_task}" if self._active_task else ""
+        context_line = f"\nRecent events: {recent_context}" if recent_context else ""
 
         if not gemini:
             base = f"You're at home in the {scene}. It's {time_str}."
@@ -180,7 +189,7 @@ class SituationGrounder:
 
 Current scene: {scene}
 Current time: {time_str}
-Who is home: {who_is_home if who_is_home else "unknown"}{task_line}
+Who is home: {who_is_home if who_is_home else "unknown"}{task_line}{context_line}
 Patient's name: {settings.patient_name}
 
 Write a calm, grounding message (1-3 sentences) that:

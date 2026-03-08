@@ -21,6 +21,8 @@ Detection flow:
      changes take effect immediately without a restart.
 """
 
+from __future__ import annotations
+
 import time
 from collections import deque
 from typing import Callable

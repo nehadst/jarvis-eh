@@ -17,6 +17,8 @@ Object context (optional future improvement):
   - YOLOv8 can be added here for object detection to enrich descriptions
 """
 
+from __future__ import annotations
+
 import time
 from collections import deque
 from datetime import datetime

@@ -1,207 +1,86 @@
 {
-  "k1": {
-    "hello": "world"
+  "last_activity": {
+    "time": 1772927684.383934,
+    "activity": "unknown",
+    "location_hint": ""
   },
-  "greeting": "hi there",
-  "x": "second",
-  "items": [
-    1,
-    2,
-    3
-  ],
-  "disk_key": {
-    "persisted": true
-  },
-  "a": 1,
-  "b": 2,
-  "events": [
+  "interactions_ronaldo": [
     {
-      "x": 1
+      "timestamp": 1772919665.279294,
+      "event": "face_recognized",
+      "whisper": "\"This is Ronaldo, your son. Remember how you both used to play football in the backyard? He's here with you now.\""
     },
     {
-      "n": 1
+      "timestamp": 1772919885.4250948,
+      "event": "face_recognized",
+      "whisper": "This is Ronaldo, your father. Remember, he always tells you stories about his favorite soccer matches."
     },
     {
-      "n": 2
+      "timestamp": 1772920990.763965,
+      "event": "face_recognized",
+      "whisper": "That's Ronaldo, your father. Remember how he made your favorite sandwiches just 18 minutes ago?"
+    },
+    {
+      "timestamp": 1772922080.717482,
+      "event": "face_recognized",
+      "whisper": "\"That's Ronaldo, your father. Remember, he loves telling stories about your childhood adventures. You just saw him 18 minutes ago.\""
     }
   ],
-  "big_list": [
+  "continuity_reminders": [
     {
-      "i": 10
+      "timestamp": 1772921029.509739,
+      "activity": "unknown",
+      "message": "Hi Dad, you were just enjoying your book. It's on the table beside your chair."
     },
     {
-      "i": 11
+      "timestamp": 1772921074.8704362,
+      "activity": "unknown",
+      "message": "\"Hi Dad, you were enjoying some light reading. Your book is by the comfy chair if you'd like to continue.\""
     },
     {
-      "i": 12
+      "timestamp": 1772921120.621611,
+      "activity": "thinking or concentrating",
+      "message": "\"Hey Dad, you were thinking about those books on the living room table. Take your time and relax while you do so.\""
     },
     {
-      "i": 13
+      "timestamp": 1772921166.5988941,
+      "activity": "unknown",
+      "message": "Hi Dad, you were just tidying up the living room. Feel free to pick up where you left off."
     },
     {
-      "i": 14
+      "timestamp": 1772921212.676789,
+      "activity": "unknown",
+      "message": "\"Dad, you were enjoying a puzzle; it's on the table if you'd like to continue.\""
     },
     {
-      "i": 15
+      "timestamp": 1772921260.453341,
+      "activity": "unknown",
+      "message": "You were enjoying a book in the living room, Dad. Would you like to continue reading it there?"
     },
     {
-      "i": 16
+      "timestamp": 1772921306.557426,
+      "activity": "unknown",
+      "message": "You were enjoying your book by the window, Dad. Shall I help you find it so you can continue reading?"
     },
     {
-      "i": 17
+      "timestamp": 1772921353.552593,
+      "activity": "unknown",
+      "message": "Hi Dad, you were enjoying your favorite book. It's on the table next to your chair."
     },
     {
-      "i": 18
+      "timestamp": 1772921398.6390898,
+      "activity": "unknown",
+      "message": "You were enjoying a book in the living room, Dad. Would you like to continue reading?"
     },
     {
-      "i": 19
+      "timestamp": 1772921445.6049018,
+      "activity": "unknown",
+      "message": "You were enjoying your book, Dad; it\u2019s right here on the table if you'd like to continue."
     },
     {
-      "i": 20
-    },
-    {
-      "i": 21
-    },
-    {
-      "i": 22
-    },
-    {
-      "i": 23
-    },
-    {
-      "i": 24
-    },
-    {
-      "i": 25
-    },
-    {
-      "i": 26
-    },
-    {
-      "i": 27
-    },
-    {
-      "i": 28
-    },
-    {
-      "i": 29
-    },
-    {
-      "i": 30
-    },
-    {
-      "i": 31
-    },
-    {
-      "i": 32
-    },
-    {
-      "i": 33
-    },
-    {
-      "i": 34
-    },
-    {
-      "i": 35
-    },
-    {
-      "i": 36
-    },
-    {
-      "i": 37
-    },
-    {
-      "i": 38
-    },
-    {
-      "i": 39
-    },
-    {
-      "i": 40
-    },
-    {
-      "i": 41
-    },
-    {
-      "i": 42
-    },
-    {
-      "i": 43
-    },
-    {
-      "i": 44
-    },
-    {
-      "i": 45
-    },
-    {
-      "i": 46
-    },
-    {
-      "i": 47
-    },
-    {
-      "i": 48
-    },
-    {
-      "i": 49
-    },
-    {
-      "i": 50
-    },
-    {
-      "i": 51
-    },
-    {
-      "i": 52
-    },
-    {
-      "i": 53
-    },
-    {
-      "i": 54
-    },
-    {
-      "i": 55
-    },
-    {
-      "i": 56
-    },
-    {
-      "i": 57
-    },
-    {
-      "i": 58
-    },
-    {
-      "i": 59
-    }
-  ],
-  "mixed": [
-    "existing_string",
-    {
-      "new": true
-    }
-  ],
-  "pub_key": {
-    "data": 42
-  },
-  "active_patient_task": {
-    "task": "Go to the kitchen and get a glass of water",
-    "set_by": "Sarah"
-  },
-  "household_context": {
-    "who_is_home": "Sarah, David"
-  },
-  "safe_zones": [
-    "garden",
-    "sunroom"
-  ],
-  "grounding_events": [
-    {
-      "timestamp": 1772927623.985621,
-      "scene": "a familiar room",
-      "message": "You're at home in the a familiar room. It's Saturday, March 7 \u00b7 6:53 PM. You were going to Go to the kitchen and get a glass of water."
+      "timestamp": 1772922058.996114,
+      "activity": "coding on computer",
+      "message": "\"Hi Dad, you were coding on your computer; your keyboard is right under your hands if you'd like to continue.\""
     }
   ]
 }

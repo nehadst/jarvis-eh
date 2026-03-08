@@ -111,3 +111,38 @@ export async function setSafezones(zones) {
   });
   return res.json();
 }
+
+/**
+ * Create or update a family member profile.
+ */
+export async function saveFamily(personId, profile) {
+  const res = await fetch(`/api/family/${personId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+  });
+  return res.json();
+}
+
+/**
+ * Upload face photos for a family member.
+ * @param {string} personId
+ * @param {FileList|File[]} files
+ */
+export async function uploadFacePhotos(personId, files) {
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  const res = await fetch(`/api/family/${personId}/photos`, {
+    method: "POST",
+    body: form,
+  });
+  return res.json();
+}
+
+/**
+ * Delete a family member and their photos.
+ */
+export async function deleteFamily(personId) {
+  const res = await fetch(`/api/family/${personId}`, { method: "DELETE" });
+  return res.json();
+}
