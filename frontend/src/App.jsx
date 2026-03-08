@@ -9,6 +9,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [captureRunning, setCaptureRunning] = useState(false);
   const [captureMode, setCaptureMode] = useState("glasses");
+  const [webcamIndex, setWebcamIndex] = useState(0);
 
   useEffect(() => {
     const ws = connectWebSocket({
@@ -23,7 +24,7 @@ export default function App() {
     await fetch("/api/capture/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ mode, webcam_index: webcamIndex }),
     });
     setCaptureRunning(true);
   };
@@ -38,7 +39,9 @@ export default function App() {
     connected,
     captureRunning,
     captureMode,
+    webcamIndex,
     onCaptureMode: setCaptureMode,
+    onWebcamIndex: setWebcamIndex,
     onStartCapture: startCapture,
     onStopCapture: stopCapture,
   };

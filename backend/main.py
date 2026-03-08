@@ -259,14 +259,57 @@ async def get_capture_mode():
     return {"mode": settings.capture_mode}
 
 
+@app.get("/api/webcams")
+async def list_webcams():
+    """Enumerate available webcam devices by probing OpenCV indices."""
+    try:
+        import cv2
+        import subprocess
+    except ImportError:
+        return {"webcams": []}
+
+    # Try to get real device names via macOS system_profiler
+    device_names: dict[int, str] = {}
+    try:
+        result = subprocess.run(
+            ["system_profiler", "SPCameraDataType", "-json"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            import json as _json
+            data = _json.loads(result.stdout)
+            for idx, cam in enumerate(data.get("SPCameraDataType", [])):
+                device_names[idx] = cam.get("_name", f"Camera {idx}")
+    except Exception:
+        pass
+
+    # Probe indices 0-9 using AVFoundation backend (macOS native)
+    devices = []
+    for i in range(10):
+        cap = cv2.VideoCapture(i, cv2.CAP_AVFOUNDATION)
+        if cap.isOpened():
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            name = device_names.get(i, f"Camera {i}")
+            devices.append({"index": i, "label": f"{name} ({w}x{h})"})
+            cap.release()
+        else:
+            cap.release()
+    return {"webcams": devices}
+
+
 @app.post("/api/capture/start")
 async def start_capture(body: dict | None = None):
     global orchestrator, capture_thread
 
     # Allow the dashboard to override capture mode at start time
     mode = (body or {}).get("mode")
+    webcam_index = (body or {}).get("webcam_index")
     if mode and mode in ("glasses", "webcam", "video", "screen"):
         settings.capture_mode = mode
+    if webcam_index is not None:
+        settings.webcam_index = int(webcam_index)
+    if mode or webcam_index is not None:
         # Rebuild orchestrator with the new capture source
         orchestrator = Orchestrator(event_callback=_on_event)
 

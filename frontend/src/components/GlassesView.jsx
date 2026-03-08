@@ -3,11 +3,21 @@ import { Link } from "react-router-dom";
 
 const WS_STREAM_URL = "ws://localhost:8000/ws/stream";
 
-export default function GlassesView({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
+export default function GlassesView({ events, connected, captureRunning, captureMode, webcamIndex, onCaptureMode, onWebcamIndex, onStartCapture, onStopCapture }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [showControls, setShowControls] = useState(true);
   const hideTimer = useRef(null);
+  const [webcams, setWebcams] = useState([]);
+
+  // Fetch available webcams when mode is "webcam"
+  useEffect(() => {
+    if (captureMode !== "webcam") return;
+    fetch("/api/webcams")
+      .then((r) => r.json())
+      .then((data) => setWebcams(data.webcams || []))
+      .catch(() => setWebcams([]));
+  }, [captureMode]);
 
   // ── Overlay state ──────────────────────────────────────────────────────
   const [faceCard, setFaceCard] = useState(null);
@@ -149,6 +159,11 @@ export default function GlassesView({ events, connected, captureRunning, capture
         break;
       }
 
+      case "task_set": {
+        setActiveTask(latest.task);
+        break;
+      }
+
       case "task_completed": {
         setActiveTask(null);
         break;
@@ -196,6 +211,19 @@ export default function GlassesView({ events, connected, captureRunning, capture
             >
               <option value="glasses">Meta Glasses</option>
               <option value="webcam">Webcam</option>
+            </select>
+          )}
+          {!captureRunning && captureMode === "webcam" && webcams.length > 0 && (
+            <select
+              style={styles.modeSelect}
+              value={webcamIndex}
+              onChange={(e) => onWebcamIndex(Number(e.target.value))}
+            >
+              {webcams.map((cam) => (
+                <option key={cam.index} value={cam.index}>
+                  {cam.label}
+                </option>
+              ))}
             </select>
           )}
           <button

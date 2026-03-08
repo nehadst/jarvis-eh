@@ -35,7 +35,6 @@ class SceneSensor:
     def __init__(self, bus: SignalBus) -> None:
         self._bus = bus
         self._scene_history: deque[bool] = deque(maxlen=UNSAFE_THRESHOLD)
-        self._safe_zones = self._load_safe_zones()
 
     def process(self, frame: np.ndarray) -> None:
         """Classify the current scene via Gemini Vision."""
@@ -53,8 +52,9 @@ class SceneSensor:
             data={"scene": scene},
         ))
 
-        # Check safety
-        is_safe = any(zone in scene.lower() for zone in self._safe_zones)
+        # Check safety — reload zones every time so caregiver edits apply instantly
+        safe_zones = self._load_safe_zones()
+        is_safe = any(zone in scene.lower() for zone in safe_zones)
         self._scene_history.append(is_safe)
 
         # Trigger wandering only when all recent readings are unsafe
@@ -85,6 +85,10 @@ class SceneSensor:
 
     def _load_safe_zones(self) -> set[str]:
         stored = memory.retrieve("safe_zones")
+        excluded = memory.retrieve("excluded_safe_zones")
+        zones = DEFAULT_SAFE_ZONES.copy()
         if isinstance(stored, list):
-            return DEFAULT_SAFE_ZONES | set(stored)
-        return DEFAULT_SAFE_ZONES
+            zones = zones | {z.lower() for z in stored}
+        if isinstance(excluded, list):
+            zones = zones - {z.lower() for z in excluded}
+        return zones

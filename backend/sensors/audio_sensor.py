@@ -32,7 +32,7 @@ from config import settings
 CHUNK_DURATION = 4        # seconds per audio chunk
 SAMPLE_RATE = 16000
 COMMAND_COOLDOWN = 8      # seconds between voice command signals
-TTS_ECHO_SUPPRESS = 6    # seconds to mute mic after TTS plays (avoid self-echo)
+TTS_ECHO_SUPPRESS = 3    # seconds to mute mic AFTER TTS finishes playing
 
 # Common Whisper hallucinations on silence
 _HALLUCINATIONS = {
@@ -209,11 +209,19 @@ class AudioSensor:
                 if self._openai_client is None:
                     continue
 
-                # Skip audio while TTS is playing — prevents the mic from
-                # recording the AI's own voice and creating a feedback loop
+                # Skip audio while TTS is playing or just finished — prevents
+                # the mic from picking up the AI's own voice (feedback loop)
+                from services.elevenlabs_client import tts as _tts
+                if _tts and _tts.is_playing():
+                    continue
+                # Also suppress for a few seconds after playback ends
+                if _tts and (time.time() - _tts.last_playback_end) < TTS_ECHO_SUPPRESS:
+                    continue
+                # Fallback: also check world state (covers the period between
+                # speak() call and actual audio starting)
                 world = self._bus.get_world()
                 last_spoken = world.get("last_spoken_time", 0.0)
-                if time.time() - last_spoken < TTS_ECHO_SUPPRESS:
+                if time.time() - last_spoken < 2:
                     continue
 
                 # Convert float32 audio to WAV bytes for the API

@@ -139,10 +139,20 @@ class Orchestrator:
 
     def set_active_task(self, task: str, set_by: str = "caregiver") -> None:
         """Called when a caregiver sets a task via the dashboard."""
+        # Capture what the patient was doing before the task (for redirect-back later)
+        prior_activity = self._bus.get_world().get("last_activity")
         self._bus.update_world("active_task", task)
         self._bus.update_world("active_task_set_by", set_by)
+        self._bus.update_world("prior_activity", prior_activity)
         from services.backboard_client import memory
         memory.store("active_patient_task", {"task": task, "set_by": set_by})
+
+        # Emit TASK_SET signal so Jarvis immediately announces the task
+        self._bus.emit(Signal(
+            type=SignalType.TASK_SET,
+            priority=Priority.HIGH,
+            data={"task": task, "set_by": set_by},
+        ))
 
     def clear_active_task(self) -> None:
         """Remove the current task (caregiver marks it done or cancels it)."""

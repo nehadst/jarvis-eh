@@ -22,6 +22,8 @@ from services.backboard_client import memory
 
 # How often (seconds) we sample frames for activity inference
 INFER_INTERVAL = 10
+# Faster inference when a task is active so completion is detected quickly
+INFER_INTERVAL_TASK_ACTIVE = 3
 
 # How long the activity buffer spans (seconds)
 BUFFER_DURATION = 90
@@ -43,8 +45,10 @@ class ActivitySensor:
         while self._buffer and self._buffer[0]["time"] < cutoff:
             self._buffer.popleft()
 
-        # Periodically infer activity
-        if now - self._last_infer_time >= INFER_INTERVAL:
+        # Periodically infer activity (faster when a task is active)
+        has_task = bool(self._bus.get_world().get("active_task"))
+        interval = INFER_INTERVAL_TASK_ACTIVE if has_task else INFER_INTERVAL
+        if now - self._last_infer_time >= interval:
             self._last_infer_time = now
             self._infer_and_store(frame)
 

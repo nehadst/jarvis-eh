@@ -27,6 +27,7 @@ from collections import deque
 from datetime import datetime
 
 from agent.signal_bus import Priority, Signal, SignalBus, SignalType
+from services.backboard_client import memory
 
 
 # How often the detector runs its checks (seconds)
@@ -39,9 +40,20 @@ CONFUSION_EMIT_COOLDOWN = 30
 HIGH_INACTIVITY_SCENE_SECS = 45     # 45s same room + no activity change
 HIGH_INACTIVITY_ACTIVITY_SECS = 45
 
+# When in a safe zone, require much longer inactivity before triggering
+# (being still at home for a few minutes is perfectly normal)
+SAFE_ZONE_HIGH_SECS = 180           # 3 minutes in a safe zone
+SAFE_ZONE_MEDIUM_SECS = 120         # 2 minutes in a safe zone
+
 # MEDIUM confidence thresholds
 MEDIUM_INACTIVITY_SECS = 30         # 30s
 MEDIUM_CONFIRM_WAIT = 15            # wait 15s before acting on medium
+
+# Default safe zones (mirrors scene_sensor.py)
+_SAFE_ZONES = {
+    "kitchen", "living room", "bedroom", "hallway", "bathroom",
+    "dining room", "office", "study", "porch", "garage",
+}
 
 # Sundowning window (4pm - 7pm)
 SUNDOWN_START_HOUR = 16
@@ -112,6 +124,12 @@ class ConfusionDetector:
         is_still = world.get("is_still", False)
         is_oscillating = world.get("is_oscillating", False)
 
+        # ── Safe zone awareness ─────────────────────────────────────────
+        # Being still/inactive at home is normal — use longer thresholds
+        in_safe_zone = self._is_in_safe_zone(scene)
+        high_threshold = SAFE_ZONE_HIGH_SECS if in_safe_zone else HIGH_INACTIVITY_SCENE_SECS
+        medium_threshold = SAFE_ZONE_MEDIUM_SECS if in_safe_zone else MEDIUM_INACTIVITY_SECS
+
         # ══════════════════════════════════════════════════════════════════
         # HIGH CONFIDENCE — act immediately
         # ══════════════════════════════════════════════════════════════════
@@ -122,9 +140,9 @@ class ConfusionDetector:
                        "Same question detected multiple times in conversation")
             return
 
-        # 2. 3+ min in same room with no meaningful activity change
-        if (scene_duration >= HIGH_INACTIVITY_SCENE_SECS
-                and activity_age >= HIGH_INACTIVITY_ACTIVITY_SECS):
+        # 2. Extended time in same room with no meaningful activity change
+        if (scene_duration >= high_threshold
+                and activity_age >= high_threshold):
             self._emit(now, "high", "extended_inactivity",
                        f"In {scene} for {int(scene_duration)}s, "
                        f"no activity change for {int(activity_age)}s")
@@ -139,14 +157,14 @@ class ConfusionDetector:
 
         medium_triggered = False
 
-        # 1. Sundowning + 2+ min inactivity
+        # 1. Sundowning + inactivity
         if (is_sundowning
-                and scene_duration >= MEDIUM_INACTIVITY_SECS
-                and activity_age >= MEDIUM_INACTIVITY_SECS):
+                and scene_duration >= medium_threshold
+                and activity_age >= medium_threshold):
             medium_triggered = True
 
-        # 2. Stillness + 2+ min in same room
-        if is_still and scene_duration >= MEDIUM_INACTIVITY_SECS:
+        # 2. Stillness + extended time in same room
+        if is_still and scene_duration >= medium_threshold:
             medium_triggered = True
 
         # 3. Oscillating motion + 1+ min in same room (pacing in a room)
@@ -173,6 +191,22 @@ class ConfusionDetector:
             self._pending_medium = None
 
     # ── Helpers ────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_in_safe_zone(scene: str) -> bool:
+        """Check if the current scene is a known safe zone (home interior)."""
+        if not scene or scene == "unknown":
+            return False
+        scene_lower = scene.lower()
+        # Load custom zones from memory
+        stored = memory.retrieve("safe_zones")
+        zones = _SAFE_ZONES.copy()
+        if isinstance(stored, list):
+            zones = zones | {z.lower() for z in stored}
+        excluded = memory.retrieve("excluded_safe_zones")
+        if isinstance(excluded, list):
+            zones = zones - {z.lower() for z in excluded}
+        return any(zone in scene_lower for zone in zones)
 
     @staticmethod
     def _is_similar(text_a: str | None, text_b: str | None) -> bool:

@@ -18,6 +18,7 @@ const TYPE_CONFIG = {
   encounter_clip_ready: { label: "Clip Ready",        color: C5, icon: "🎥" },
   montage_ready:      { label: "Montage Ready",       color: C5, icon: "🎬" },
   confusion_checkin:  { label: "Check-In",            color: C1, icon: "💭" },
+  task_set:           { label: "Task Set",             color: C3, icon: "📝" },
   task_reminder:      { label: "Task Reminder",       color: C3, icon: "📋" },
   task_completed:     { label: "Task Complete",       color: C2, icon: "✅" },
 };

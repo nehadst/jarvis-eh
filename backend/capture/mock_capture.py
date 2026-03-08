@@ -9,10 +9,13 @@ Usage in .env:
 
 from __future__ import annotations
 
+import platform
 import time
 import cv2
 import numpy as np
 from config import settings
+
+_IS_MACOS = platform.system() == "Darwin"
 
 
 class MockCapture:
@@ -23,21 +26,27 @@ class MockCapture:
 
     def __init__(self, source=None, fps: float = 30.0) -> None:
         if source is None:
-            source = 0 if settings.capture_mode == "webcam" else settings.video_path
+            source = settings.webcam_index if settings.capture_mode == "webcam" else settings.video_path
         self._source = source
         self._interval = 1.0 / fps
         self._running = False
         self._cap = None
 
+    def _open_capture(self):
+        """Open VideoCapture with AVFoundation on macOS for webcam sources."""
+        if isinstance(self._source, int) and _IS_MACOS:
+            return cv2.VideoCapture(self._source, cv2.CAP_AVFOUNDATION)
+        return cv2.VideoCapture(self._source)
+
     def frames(self):
         self._running = True
-        self._cap = cv2.VideoCapture(self._source)
+        self._cap = self._open_capture()
 
         if not self._cap.isOpened():
             print(f"[MockCapture] Could not open source: {self._source}")
             return
 
-        print(f"[MockCapture] Streaming from {'webcam' if self._source == 0 else self._source}")
+        print(f"[MockCapture] Streaming from {'webcam idx=' + str(self._source) if isinstance(self._source, int) else self._source}")
 
         while self._running:
             t0 = time.time()
@@ -61,7 +70,7 @@ class MockCapture:
         print("[MockCapture] Stopped.")
 
     def grab_once(self) -> np.ndarray | None:
-        cap = cv2.VideoCapture(self._source)
+        cap = self._open_capture()
         ret, frame = cap.read()
         cap.release()
         return frame if ret else None

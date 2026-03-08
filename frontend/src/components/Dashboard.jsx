@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import EventFeed from "./EventFeed.jsx";
 import TaskPanel from "./TaskPanel.jsx";
@@ -9,10 +9,20 @@ import { LightRays } from "./ui/light-rays.jsx";
 
 const C2 = "oklch(0.645 0.246 16.439)";
 
-export default function Dashboard({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
+export default function Dashboard({ events, connected, captureRunning, captureMode, webcamIndex, onCaptureMode, onWebcamIndex, onStartCapture, onStopCapture }) {
   const [clipEvent, setClipEvent] = useState(null);
   const [clipDismissed, setClipDismissed] = useState(false);
   const [tab, setTab] = useState("live"); // "live" | "family"
+  const [webcams, setWebcams] = useState([]);
+
+  // Fetch available webcams when mode is "webcam"
+  useEffect(() => {
+    if (captureMode !== "webcam") return;
+    fetch("/api/webcams")
+      .then((r) => r.json())
+      .then((data) => setWebcams(data.webcams || []))
+      .catch(() => setWebcams([]));
+  }, [captureMode]);
 
   // Show the player when an encounter_clip_ready or montage_ready event arrives
   const latestClip = events.findLast?.((e) => e.type === "encounter_clip_ready" || e.type === "montage_ready") ?? null;
@@ -104,6 +114,21 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
             >
               <option value="glasses">Meta Glasses</option>
               <option value="webcam">Webcam</option>
+            </select>
+          )}
+
+          {/* Webcam device picker */}
+          {!captureRunning && captureMode === "webcam" && webcams.length > 0 && (
+            <select
+              className="px-2.5 py-1.5 text-[13px] font-medium cursor-pointer outline-none bg-accent border border-border text-foreground"
+              value={webcamIndex}
+              onChange={(e) => onWebcamIndex(Number(e.target.value))}
+            >
+              {webcams.map((cam) => (
+                <option key={cam.index} value={cam.index}>
+                  {cam.label}
+                </option>
+              ))}
             </select>
           )}
 

@@ -23,7 +23,7 @@ from services.backboard_client import memory
 
 # ── Suppression / cooldown constants ──────────────────────────────────────────
 
-MIN_TTS_GAP = 4           # seconds between any TTS output
+MIN_TTS_GAP = 8           # seconds between any TTS output
 FACE_COOLDOWN = 15        # per-person cooldown for face whispers
 GROUNDING_COOLDOWN = 30   # grounding message cooldown
 WANDERING_COOLDOWN = 60   # wandering redirect cooldown
@@ -55,6 +55,10 @@ class JarvisAgent:
 
         self._last_confusion_time = 0.0
 
+        # Task completion tracking
+        self._last_task_check_time = 0.0   # when we last checked task engagement
+        self._last_seen_activity: str | None = None  # track activity changes
+
         # Dispatch map: signal type -> handler
         # NOTE: STILLNESS and OSCILLATING_MOTION are no longer dispatched here.
         # They are now inputs to the ConfusionDetector which emits CONFUSION signals.
@@ -67,6 +71,7 @@ class JarvisAgent:
             SignalType.CONVERSATION_LOOP: self._handle_conversation,
             SignalType.CONVERSATION_TOPIC: self._handle_conversation,
             SignalType.VOICE_COMMAND: self._handle_voice_command,
+            SignalType.TASK_SET: self._handle_task_set,
         }
 
     # ── Main tick (called each AI worker cycle) ───────────────────────────────
@@ -75,11 +80,16 @@ class JarvisAgent:
         """
         Read pending signals, apply suppression, dispatch the highest-priority
         actionable signal. Only handles one action per tick.
+        Also monitors task completion when a task is active.
         """
         world = self._bus.get_world()
 
         # Accumulate transcript into active conversation sessions every tick
         self._session_manager.accumulate_transcript(world)
+
+        # ── Task completion monitoring (runs every tick, independent of signals)
+        if world.get("active_task"):
+            self._monitor_task_completion(world)
 
         signals = self._bus.get_pending_signals()
         if not signals:
@@ -123,8 +133,8 @@ class JarvisAgent:
         if signal.type == SignalType.FACE_DEPARTED:
             return True  # departure signals always pass
 
-        if signal.type in (SignalType.MANUAL_GROUNDING, SignalType.VOICE_COMMAND):
-            return True  # explicit user requests always pass
+        if signal.type in (SignalType.MANUAL_GROUNDING, SignalType.VOICE_COMMAND, SignalType.TASK_SET):
+            return True  # explicit user/caregiver requests always pass
 
         if signal.type == SignalType.CONFUSION:
             return (now - self._last_confusion_time) >= CONFUSION_COOLDOWN
@@ -141,6 +151,34 @@ class JarvisAgent:
         return True
 
     # ── Handlers ──────────────────────────────────────────────────────────────
+
+    def _handle_task_set(self, signal: Signal, world: dict) -> None:
+        """Immediately announce a newly set task to the patient."""
+        task = signal.data.get("task", "")
+        set_by = signal.data.get("set_by", "caregiver")
+        if not task:
+            return
+
+        # Reset completion tracking
+        self._last_seen_activity = None
+
+        # Generate and speak the task announcement
+        scene = world.get("last_scene", "")
+        is_home = self._is_in_safe_zone(scene)
+        prior = world.get("prior_activity")
+        prior_desc = ""
+        if prior and isinstance(prior, dict):
+            prior_desc = prior.get("activity", "")
+
+        announcement = self._generate_task_announcement(task, set_by, prior_desc, is_home)
+        self._speak_and_record(announcement, "task_set")
+
+        self._event_callback({
+            "type": "task_set",
+            "task": task,
+            "set_by": set_by,
+            "message": announcement,
+        })
 
     def _handle_wandering(self, signal: Signal, world: dict) -> None:
         """Generate wandering redirect, speak, fire event."""
@@ -352,6 +390,22 @@ class JarvisAgent:
 
     # ── Delivery helpers ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _is_in_safe_zone(scene: str) -> bool:
+        """Check if the scene is a known safe zone."""
+        from sensors.scene_sensor import DEFAULT_SAFE_ZONES
+        if not scene or scene == "unknown":
+            return False
+        scene_lower = scene.lower()
+        zones = DEFAULT_SAFE_ZONES.copy()
+        stored = memory.retrieve("safe_zones")
+        if isinstance(stored, list):
+            zones = zones | {z.lower() for z in stored}
+        excluded = memory.retrieve("excluded_safe_zones")
+        if isinstance(excluded, list):
+            zones = zones - {z.lower() for z in excluded}
+        return any(zone in scene_lower for zone in zones)
+
     def _deliver_grounding(self, signal: Signal, world: dict) -> None:
         """Build and deliver a grounding message."""
         scene = world.get("last_scene", "a familiar room")
@@ -389,8 +443,9 @@ class JarvisAgent:
         activity = activity_entry.get("activity", "something")
         location_hint = activity_entry.get("location_hint", "")
         active_task = world.get("active_task")
+        scene = world.get("last_scene", "")
 
-        reminder_text = self._generate_activity_reminder(activity, location_hint, active_task)
+        reminder_text = self._generate_activity_reminder(activity, location_hint, active_task, scene)
         self._speak_and_record(reminder_text, "activity")
 
         memory.append("continuity_reminders", {
@@ -409,12 +464,17 @@ class JarvisAgent:
     def _deliver_task_reminder(self, task: str, world: dict) -> None:
         """Generate and deliver a task reminder (caregiver-set task takes priority)."""
         scene = world.get("last_scene", "a familiar room")
+        is_home = self._is_in_safe_zone(scene)
 
         if not gemini:
             reminder = f"{settings.patient_name}, you were going to {task}."
         else:
+            home_instruction = (
+                "\n- They are at home — do NOT suggest going home or heading home"
+                if is_home else ""
+            )
             try:
-                prompt = f"""A person with dementia has become confused. Their caregiver set a task for them.
+                prompt = f"""A person with dementia needs a gentle reminder about their task.
 
 Task: {task}
 Current scene: {scene}
@@ -423,7 +483,7 @@ Patient's name: {settings.patient_name}
 Write a gentle 1-2 sentence reminder that:
 - Tells them what they should be doing (the task)
 - If helpful, mentions where they are
-- Is warm, calm, and encouraging
+- Is warm, calm, and encouraging{home_instruction}
 - Under 25 words
 
 Only output the reminder text."""
@@ -440,13 +500,103 @@ Only output the reminder text."""
             "message": reminder,
         })
 
+    # ── Task completion monitoring ──────────────────────────────────────────
+
+    # How often to check task engagement (seconds)
+    _TASK_CHECK_INTERVAL = 1
+
+    def _monitor_task_completion(self, world: dict) -> None:
+        """Check if the patient's current activity matches the active task.
+
+        Runs every _TASK_CHECK_INTERVAL seconds. A single confirmed match
+        from Gemini is enough to declare the task done — no streak needed,
+        the LLM check is already reliable.
+        """
+        now = time.time()
+        if (now - self._last_task_check_time) < self._TASK_CHECK_INTERVAL:
+            return
+        self._last_task_check_time = now
+
+        task = world.get("active_task")
+        if not task:
+            return
+
+        last_activity = world.get("last_activity")
+        if not last_activity or not isinstance(last_activity, dict):
+            return
+
+        activity_text = last_activity.get("activity", "unknown")
+        if activity_text == "unknown":
+            return
+
+        # Don't re-check the exact same activity text we already evaluated
+        if activity_text == self._last_seen_activity:
+            return
+        self._last_seen_activity = activity_text
+
+        # Ask Gemini (text-only, cheap) if the activity matches the task
+        if self._activity_matches_task(activity_text, task):
+            print(f"[Jarvis] Task matched: '{activity_text}' completes '{task}'")
+            self._complete_task(task, world)
+
+    def _activity_matches_task(self, activity: str, task: str) -> bool:
+        """Ask Gemini whether the observed activity is completing the given task."""
+        if not gemini:
+            # Simple keyword overlap fallback
+            task_words = set(task.lower().split())
+            activity_words = set(activity.lower().split())
+            return len(task_words & activity_words) >= 2
+
+        try:
+            prompt = (
+                f"Task assigned: \"{task}\"\n"
+                f"Current observed activity: \"{activity}\"\n\n"
+                "Is the person currently doing or completing this task? "
+                "Be lenient — if the activity is clearly related to the task, say YES. "
+                "Answer with only YES or NO."
+            )
+            answer = gemini.generate(prompt).strip().upper()
+            return answer.startswith("YES")
+        except Exception:
+            return False
+
+    def _complete_task(self, task: str, world: dict) -> None:
+        """Task is done — announce completion, clear it, redirect to prior activity."""
+        prior = world.get("prior_activity")
+        prior_desc = ""
+        if prior and isinstance(prior, dict):
+            prior_desc = prior.get("activity", "")
+
+        # Generate completion message
+        completion_msg = self._generate_task_completion(task, prior_desc)
+        self._speak_and_record(completion_msg, "task_completed")
+
+        # Clear task state
+        self._bus.update_world("active_task", None)
+        self._bus.update_world("active_task_set_by", None)
+        self._bus.update_world("prior_activity", None)
+        memory.store("active_patient_task", {})
+
+        # Reset tracking
+        self._last_seen_activity = None
+
+        self._event_callback({
+            "type": "task_completed",
+            "task": task,
+            "returning_to": prior_desc or None,
+            "message": completion_msg,
+        })
+        print(f"[Jarvis] Task completed: '{task}'")
+
     # ── THE ONLY tts.speak() call in the system ──────────────────────────────
 
     def _speak_and_record(self, text: str, action_type: str) -> None:
         """Single point of TTS output. Updates last_spoken_time in world state."""
+        # Set last_spoken_time BEFORE speak() so the audio sensor starts
+        # suppressing immediately, even while TTS audio is being generated.
+        self._bus.update_world("last_spoken_time", time.time())
         if tts and text:
             tts.speak(text)
-        self._bus.update_world("last_spoken_time", time.time())
         print(f"[Jarvis] [{action_type}] {text[:80]}{'...' if len(text) > 80 else ''}")
 
     # ── LLM generation methods ────────────────────────────────────────────────
@@ -486,12 +636,18 @@ Only output the reminder text."""
         who_is_home = household_context.get("who_is_home", "")
         task_line = f"\nCurrent task they should be doing: {active_task}" if active_task else ""
         context_line = f"\nRecent events: {recent_context}" if recent_context else ""
+        is_home = self._is_in_safe_zone(scene)
 
         if not gemini:
             base = f"You're at home in the {scene}. It's {time_str}."
             if active_task:
                 base += f" You were going to {active_task}."
             return base
+
+        home_instruction = (
+            "\n- They are ALREADY at home — do NOT suggest going home or heading home"
+            if is_home else ""
+        )
 
         prompt = f"""You are a gentle AI assistant helping a person with dementia feel calm and oriented.
 
@@ -505,7 +661,7 @@ Write a calm, grounding message (1-3 sentences) that:
 - Tells them what time / day it is
 - If there's a task, gently reminds them what they were going to do
 - If someone is home, mentions them
-- Sounds warm and natural, NOT robotic
+- Sounds warm and natural, NOT robotic{home_instruction}
 - Is under 40 words
 
 Only output the message text."""
@@ -517,6 +673,7 @@ Only output the message text."""
 
     def _generate_activity_reminder(
         self, activity: str, location_hint: str, active_task: str | None = None,
+        scene: str = "",
     ) -> str:
         """Generate a natural activity continuity reminder."""
         location_line = f" ({location_hint})" if location_hint else ""
@@ -524,7 +681,13 @@ Only output the message text."""
         if not gemini:
             return f"You were {activity}.{location_line}"
 
-        prompt = f"""A person with dementia has become confused and stopped what they were doing.
+        is_home = self._is_in_safe_zone(scene) if scene else True
+        home_instruction = (
+            "\n- They are at home — do NOT suggest going home or heading home"
+            if is_home else ""
+        )
+
+        prompt = f"""A person with dementia has paused and may need a gentle reminder.
 
 Last known activity: {activity}{location_line}
 Active caregiver task: {active_task or "none"}
@@ -533,7 +696,7 @@ Patient's name: {settings.patient_name}
 Write a gentle 1-2 sentence reminder that:
 - Reminds them what they were doing
 - If there's a location hint, tells them where the object is
-- Is warm, calm, and natural
+- Is warm, calm, and natural{home_instruction}
 - Under 25 words
 
 Only output the reminder text."""
@@ -562,6 +725,69 @@ Only output the sentence."""
             return gemini.generate(prompt)
         except Exception:
             return f"Hey {settings.patient_name}, let's head back home."
+
+    def _generate_task_announcement(
+        self, task: str, set_by: str, prior_activity: str, is_home: bool,
+    ) -> str:
+        """Generate a warm announcement when a new task is set."""
+        name = settings.patient_name.split()[0]
+
+        if not gemini:
+            if prior_activity:
+                return f"Hey {name}, {set_by} would like you to {task}. You can get back to {prior_activity} after."
+            return f"Hey {name}, {set_by} would like you to {task}."
+
+        prior_line = f"\nThey were just doing: {prior_activity}" if prior_activity else ""
+        home_instruction = (
+            "\n- They are at home — do NOT suggest going home"
+            if is_home else ""
+        )
+
+        try:
+            prompt = f"""Write a warm, gentle message for {name}, a person with dementia.
+
+Their caregiver ({set_by}) has just asked them to: {task}{prior_line}
+
+The message should:
+- Tell them what {set_by} would like them to do
+- If they were doing something before, acknowledge it and say they can return to it after
+- Sound like a caring family member, warm and encouraging
+- Be 1-2 sentences, under 30 words{home_instruction}
+
+Only output the message text."""
+            return gemini.generate(prompt)
+        except Exception:
+            if prior_activity:
+                return f"Hey {name}, {set_by} would like you to {task}. You can get back to {prior_activity} after."
+            return f"Hey {name}, {set_by} would like you to {task}."
+
+    def _generate_task_completion(self, task: str, prior_activity: str) -> str:
+        """Generate a warm completion message with optional redirect to prior activity."""
+        name = settings.patient_name.split()[0]
+
+        if not gemini:
+            if prior_activity:
+                return f"Great job, {name}! Now you can get back to {prior_activity}."
+            return f"Well done, {name}!"
+
+        prior_line = f"\nBefore the task, they were: {prior_activity}" if prior_activity else ""
+
+        try:
+            prompt = f"""Write a warm, encouraging message for {name}, a person with dementia.
+
+They just finished: {task}{prior_line}
+
+The message should:
+- Briefly praise them for completing the task
+- If they had a prior activity, gently remind them they can go back to it
+- Be warm, encouraging, under 20 words
+
+Only output the message text."""
+            return gemini.generate(prompt)
+        except Exception:
+            if prior_activity:
+                return f"Great job, {name}! Now you can get back to {prior_activity}."
+            return f"Well done, {name}!"
 
     # ── Memory helpers (moved from recognizer.py) ─────────────────────────────
 

@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Capture source: "glasses" | "screen" | "webcam" | "video"
     capture_mode: str = "glasses"
 
+    # Webcam device index (only used when capture_mode="webcam")
+    webcam_index: int = 0
+
     # Video file path (only used when capture_mode="video")
     video_path: str = "data/test_clips/sample.mp4"
 
