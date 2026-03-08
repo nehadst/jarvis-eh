@@ -70,6 +70,13 @@ class WanderingGuardian:
         safe_zones = self._load_safe_zones()
         is_safe = any(zone in scene.lower() for zone in safe_zones)
 
+        # If the scene isn't a known safe zone, check if it's consistent
+        # with a caregiver-provided situational context (e.g. "at a church event")
+        if not is_safe:
+            context = self._load_situational_context()
+            if context and self._scene_matches_context(scene, context):
+                is_safe = True
+
         if is_safe:
             self._last_safe_scene = scene
             # Reset episode if they've been safe long enough after a wandering episode
@@ -193,6 +200,39 @@ Only output the sentence, nothing else."""
     def _load_safe_zones(self) -> set[str]:
         """Reload safe zones from memory on every call so caregiver edits apply instantly."""
         stored = memory.retrieve("safe_zones")
+        excluded = memory.retrieve("excluded_safe_zones")
+        zones = DEFAULT_SAFE_ZONES.copy()
         if isinstance(stored, list):
-            return DEFAULT_SAFE_ZONES | {z.lower() for z in stored}
-        return DEFAULT_SAFE_ZONES
+            zones = zones | {z.lower() for z in stored}
+        if isinstance(excluded, list):
+            zones = zones - {z.lower() for z in excluded}
+        return zones
+
+    def _load_situational_context(self) -> str:
+        """Load caregiver-provided situational context (e.g. 'at a church event until 3pm')."""
+        stored = memory.retrieve("situational_context")
+        if isinstance(stored, dict):
+            return stored.get("description", "")
+        return ""
+
+    def _scene_matches_context(self, scene: str, context: str) -> bool:
+        """
+        Ask Gemini whether the current scene is consistent with the caregiver's context.
+        Deliberately lenient — if the person is supposed to be at an event,
+        being anywhere at that event counts as fine.
+        """
+        if not gemini:
+            return False
+        try:
+            prompt = (
+                f"A caregiver said that {settings.patient_name} is currently: {context}\n"
+                f"The camera sees {settings.patient_name} is at: {scene}\n\n"
+                "Is being at that location consistent with the caregiver's description? "
+                "Be lenient — if the person is at an event or outing, "
+                "any typical location within that setting counts as consistent. "
+                "Answer with only YES or NO."
+            )
+            answer = gemini.generate(prompt).strip().upper()
+            return answer.startswith("YES")
+        except Exception:
+            return False

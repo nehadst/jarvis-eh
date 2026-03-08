@@ -21,6 +21,9 @@ Endpoints:
   POST /api/montage/{person_id}         — on-demand memory montage (optional ?tag=christmas)
   GET  /api/safezones                   — get current safe zone list
   POST /api/safezones                   — update safe zone list
+  DELETE /api/safezones/{zone}          — remove a zone (custom or default)
+  GET  /api/context                     — get current situational context
+  POST /api/context                     — set situational context (where patient is expected to be)
   POST /api/encounter/{person_id}/record — manually trigger an encounter recording
   GET  /api/encounters/{person_id}      — list encounter clips + snapshots for a person
   GET  /api/encounters                  — list recent encounters across all people
@@ -380,13 +383,64 @@ async def trigger_montage(person_id: str, tag: str = Query(None)):
 @app.get("/api/safezones")
 async def get_safezones():
     """
-    Return the current safe zone list (caregiver-stored zones merged with
-    the built-in defaults).
+    Return the current safe zone list (defaults + custom, minus excluded).
     """
     stored = memory.retrieve("safe_zones")
+    excluded_stored = memory.retrieve("excluded_safe_zones")
     custom: list[str] = stored if isinstance(stored, list) else []
-    all_zones = sorted(DEFAULT_SAFE_ZONES | {z.lower() for z in custom})
-    return {"safe_zones": all_zones, "custom_zones": custom}
+    excluded: list[str] = excluded_stored if isinstance(excluded_stored, list) else []
+    all_zones = sorted(
+        (DEFAULT_SAFE_ZONES | {z.lower() for z in custom}) - {z.lower() for z in excluded}
+    )
+    return {"safe_zones": all_zones, "custom_zones": custom, "excluded_zones": excluded}
+
+
+@app.delete("/api/safezones/{zone}")
+async def remove_safezone(zone: str):
+    """
+    Remove a safe zone by name. Works for both custom zones and built-in defaults.
+    Custom zones are removed from the stored list; default zones are added to an
+    excluded list so they are subtracted at runtime.
+    """
+    zone = zone.lower().strip()
+
+    # Remove from custom list if present
+    stored = memory.retrieve("safe_zones")
+    custom: list[str] = stored if isinstance(stored, list) else []
+    if zone in custom:
+        custom = [z for z in custom if z != zone]
+        memory.store("safe_zones", custom)
+
+    # If it's a default zone, track it as excluded
+    if zone in DEFAULT_SAFE_ZONES:
+        excluded_stored = memory.retrieve("excluded_safe_zones")
+        excluded: list[str] = excluded_stored if isinstance(excluded_stored, list) else []
+        if zone not in excluded:
+            excluded = sorted(excluded + [zone])
+            memory.store("excluded_safe_zones", excluded)
+
+    return {"ok": True, "removed": zone}
+
+
+@app.get("/api/context")
+async def get_context():
+    """Return the current caregiver-provided situational context."""
+    return memory.retrieve("situational_context") or {"description": ""}
+
+
+@app.post("/api/context")
+async def set_context(body: dict):
+    """
+    Set background context so the wandering guardian knows where the patient is supposed to be.
+    Example body: {"description": "at a church community event until 3pm"}
+    Send an empty description to clear the context.
+    """
+    description = body.get("description", "").strip()
+    if description:
+        memory.store("situational_context", {"description": description})
+    else:
+        memory.store("situational_context", {"description": ""})
+    return {"ok": True, "description": description}
 
 
 @app.post("/api/safezones")
@@ -400,9 +454,17 @@ async def set_safezones(body: dict):
     zones = body.get("safe_zones", [])
     if not isinstance(zones, list):
         raise HTTPException(status_code=400, detail="safe_zones must be a list")
+    incoming = {z.lower().strip() for z in zones if z.strip()}
     # Persist only the custom additions (deduplicated, lowercased)
-    custom = sorted({z.lower().strip() for z in zones if z.strip()})
+    custom = sorted(incoming - DEFAULT_SAFE_ZONES)
     memory.store("safe_zones", custom)
+    # Un-exclude any default zones that are being re-added
+    re_added_defaults = incoming & DEFAULT_SAFE_ZONES
+    if re_added_defaults:
+        excluded_stored = memory.retrieve("excluded_safe_zones")
+        excluded: list[str] = excluded_stored if isinstance(excluded_stored, list) else []
+        excluded = sorted(z for z in excluded if z not in re_added_defaults)
+        memory.store("excluded_safe_zones", excluded)
     return {"ok": True, "safe_zones": custom}
 
 
