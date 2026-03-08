@@ -33,7 +33,6 @@ from typing import Callable
 
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis
 
 from config import settings, FACE_DB_PATH, FAMILY_PROFILES_PATH
 from services.gemini_client import gemini
@@ -58,17 +57,24 @@ class FaceRecognizer:
         self._overlay: dict | None = None
 
         # ── InsightFace initialization ────────────────────────────────────
-        det_size = settings.face_det_size
-        print(f"[FaceRecognizer] Loading InsightFace model '{settings.face_model}' "
-              f"(det_size={det_size})...")
+        # Lazy-import to avoid crash on systems without insightface/onnxruntime
+        self._app = None
+        try:
+            from insightface.app import FaceAnalysis
 
-        self._app = FaceAnalysis(
-            name=settings.face_model,
-            allowed_modules=["detection", "recognition"],
-            providers=["CPUExecutionProvider"],
-        )
-        self._app.prepare(ctx_id=-1, det_size=(det_size, det_size))
-        print("[FaceRecognizer] InsightFace ready.")
+            det_size = settings.face_det_size
+            print(f"[FaceRecognizer] Loading InsightFace model '{settings.face_model}' "
+                  f"(det_size={det_size})...")
+
+            self._app = FaceAnalysis(
+                name=settings.face_model,
+                allowed_modules=["detection", "recognition"],
+                providers=["CPUExecutionProvider"],
+            )
+            self._app.prepare(ctx_id=-1, det_size=(det_size, det_size))
+            print("[FaceRecognizer] InsightFace ready.")
+        except Exception as e:
+            print(f"[FaceRecognizer] InsightFace unavailable — face recognition disabled: {e}")
 
         # ── Pre-compute embeddings for all family photos ──────────────────
         # { person_id: [ (normed_embedding, photo_path_str), ... ] }
@@ -83,6 +89,8 @@ class FaceRecognizer:
         Single forward pass — no temp files, no two-stage detection.
         """
         if not self._family_embeddings:
+            return
+        if self._app is None:
             return
 
         # One call: detect all faces + compute their embeddings (~30-50ms)
@@ -183,6 +191,9 @@ class FaceRecognizer:
     def _build_embeddings(self) -> None:
         """Scan face_db/ and compute embeddings for every reference photo."""
         self._family_embeddings = {}
+
+        if self._app is None:
+            return
 
         if not FACE_DB_PATH.exists():
             print("[FaceRecognizer] No face_db directory found.")

@@ -13,6 +13,7 @@ Usage (from main.py):
 
 from __future__ import annotations
 
+import logging
 import threading
 from queue import Queue, Empty, Full
 from typing import Callable
@@ -29,9 +30,39 @@ from features.situation_grounding.grounder import SituationGrounder
 from features.activity_continuity.tracker import ActivityTracker
 from features.wandering_guardian.guardian import WanderingGuardian
 
+logger = logging.getLogger(__name__)
+
+# Lazy-import heavy native packages (cv2, numpy, capture modules).
+# The server starts cleanly even when these are not installed; capture
+# simply won't work until the packages are available.
+try:
+    import cv2
+    import numpy as np
+    _cv2_available = True
+except ImportError:
+    cv2 = None  # type: ignore[assignment]
+    np = None   # type: ignore[assignment]
+    _cv2_available = False
+    logger.warning("cv2/numpy not available — capture & MJPEG disabled")
+
+try:
+    from capture.frame_capture import FrameCapture
+except ImportError:
+    FrameCapture = None  # type: ignore[misc,assignment]
+
+try:
+    from capture.glasses_capture import GlassesCapture
+except ImportError:
+    GlassesCapture = None  # type: ignore[misc,assignment]
+
+try:
+    from capture.mock_capture import MockCapture
+except ImportError:
+    MockCapture = None  # type: ignore[misc,assignment]
+
 
 class Orchestrator:
-    def __init__(self, event_callback: Callable[[dict], None] | None = None) -> None:
+    def __init__(self, event_callback: Callable[[dict], None] | None = None, capture=None) -> None:
         self.event_callback = event_callback or (lambda e: None)
         self.is_running = False
         self.active_task: str | None = None
@@ -47,16 +78,27 @@ class Orchestrator:
         self.tracker = ActivityTracker(on_event=self.event_callback)
         self.guardian = WanderingGuardian(on_event=self.event_callback)
 
-        # Capture source
-        if settings.capture_mode == "glasses":
+        # Capture source — allow explicit override (used by tests/VideoFileCapture)
+        if capture is not None:
+            self._capture = capture
+        elif settings.capture_mode == "glasses" and GlassesCapture is not None:
             self._capture = GlassesCapture(
                 host=settings.glasses_ws_host,
                 port=settings.glasses_ws_port,
             )
-        elif settings.capture_mode in ("webcam", "video"):
+        elif settings.capture_mode in ("webcam", "video") and MockCapture is not None:
             self._capture = MockCapture()
-        else:
+        elif FrameCapture is not None:
             self._capture = FrameCapture()
+        else:
+            self._capture = None
+
+        if self._capture is None:
+            logger.warning(
+                "No capture backend available for mode=%s — "
+                "capture will not start until the required packages are installed.",
+                settings.capture_mode,
+            )
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -73,6 +115,9 @@ class Orchestrator:
 
     def trigger_manual_grounding(self) -> None:
         """Grab a fresh frame and force a grounding message immediately."""
+        if self._capture is None:
+            logger.warning("trigger_manual_grounding called but no capture backend")
+            return
         frame = self._capture.grab_once()
         self.grounder.trigger_manual(frame)
 
@@ -82,6 +127,10 @@ class Orchestrator:
         Ingests frames at full speed for the MJPEG stream.
         AI processing runs on a separate background thread so it never blocks display.
         """
+        if self._capture is None:
+            logger.error("Cannot start capture — no backend available")
+            return
+
         self.is_running = True
         print("[Orchestrator] Capture loop started.")
 
@@ -151,6 +200,7 @@ class Orchestrator:
                 frame = self._latest_frame
         if frame is None:
             return None
+        frame = self.face_recognizer.draw_overlay(frame)
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return buf.tobytes()
 
@@ -170,3 +220,17 @@ class Orchestrator:
     def stop(self) -> None:
         self.is_running = False
         self._capture.stop()
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _count_faces(frame) -> int:
+        """Fast haar-cascade face count for conversation detection."""
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+        )
+        return len(faces)

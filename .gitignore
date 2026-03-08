@@ -27,6 +27,7 @@ deepface_test/face_db/
 deepface_test/frames/
 backend/data/face_db/
 backend/data/frames/
+backend/data/test_videos/
 backend/data/*.db
 backend/data/*.json.bak
 # Keep the directory structure

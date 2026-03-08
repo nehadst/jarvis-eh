@@ -11,6 +11,7 @@ const TYPE_CONFIG = {
   situation_grounding:{ label: "Grounding",           color: C1, icon: "🏠" },
   activity_continuity:{ label: "Activity Reminder",   color: C3, icon: "🔄" },
   wandering_detected: { label: "Wandering Alert",     color: CD, icon: "⚠️" },
+  wandering_escalated:{ label: "Wandering — Urgent",  color: CD, icon: "🚨" },
   conversation_assist:{ label: "Conversation Assist", color: C4, icon: "💬" },
   montage_ready:      { label: "Montage Ready",       color: C5, icon: "🎬" },
   confusion_checkin:  { label: "Check-In",            color: C1, icon: "💭" },
@@ -26,13 +27,14 @@ function formatTime(iso) {
 function EventCard({ event, onPlayMontage }) {
   const cfg = TYPE_CONFIG[event.type] || { label: event.type, color: "var(--muted-foreground)", icon: "•" };
   const message = event.whisper || event.message || "";
+  const isUrgent = event.type === "wandering_escalated";
 
   return (
     <div
       className="p-3.5"
       style={{
-        background: "var(--card)",
-        border: "1px solid var(--border)",
+        background: isUrgent ? `color-mix(in oklch, ${CD} 8%, var(--card))` : "var(--card)",
+        border: `1px solid ${isUrgent ? `color-mix(in oklch, ${CD} 40%, transparent)` : "var(--border)"}`,
         borderLeft: `3px solid ${cfg.color}`,
       }}
     >
@@ -61,6 +63,12 @@ function EventCard({ event, onPlayMontage }) {
       {/* Details */}
       {event.scene && (
         <p className="text-[11px] text-muted-foreground mt-1">Scene: {event.scene}</p>
+      )}
+      {event.last_safe_scene && (
+        <p className="text-[11px] text-muted-foreground mt-1">Last safe location: {event.last_safe_scene}</p>
+      )}
+      {event.alert_count > 1 && (
+        <p className="text-[11px] mt-1" style={{ color: CD }}>Alert #{event.alert_count} in this episode</p>
       )}
       {event.activity && (
         <p className="text-[11px] text-muted-foreground mt-1">Activity: {event.activity}</p>

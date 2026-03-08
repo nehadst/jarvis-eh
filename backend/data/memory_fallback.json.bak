@@ -114,5 +114,11 @@
       "scene": "room interior",
       "message": "Hey Dad, let's head back inside for some tea and a chat."
     }
+  ],
+  "household_context": {
+    "who_is_home": "Sarah, David"
+  },
+  "safe_zones": [
+    "garden"
   ]
 }

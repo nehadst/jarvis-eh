@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding } from "../api/client.js";
+import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
 
 const C1 = "oklch(0.81 0.117 11.638)";
 const C2 = "oklch(0.645 0.246 16.439)";
@@ -29,6 +29,10 @@ export default function TaskPanel() {
   const [montaging, setMontaging] = useState(false);
   const [montageSent, setMontageSent] = useState(false);
 
+  const [customZones, setCustomZones] = useState([]);
+  const [defaultZones, setDefaultZones] = useState([]);
+  const [newZone, setNewZone] = useState("");
+
   useEffect(() => {
     fetchFamily()
       .then((data) => {
@@ -38,6 +42,14 @@ export default function TaskPanel() {
       .catch(() => {});
     getHousehold()
       .then((data) => setWhoIsHome(data?.who_is_home || ""))
+      .catch(() => {});
+    getSafezones()
+      .then((data) => {
+        setCustomZones(data?.custom_zones || []);
+        const all = data?.safe_zones || [];
+        const custom = data?.custom_zones || [];
+        setDefaultZones(all.filter((z) => !custom.includes(z)));
+      })
       .catch(() => {});
   }, []);
 
@@ -74,6 +86,29 @@ export default function TaskPanel() {
       setTimeout(() => setMontageSent(false), 4000);
     } finally {
       setMontaging(false);
+    }
+  };
+
+  const handleAddZone = async () => {
+    const zone = newZone.trim().toLowerCase();
+    if (!zone || customZones.includes(zone)) return;
+    const updated = [...customZones, zone];
+    setCustomZones(updated);
+    setNewZone("");
+    try {
+      await setSafezones(updated);
+    } catch {
+      setCustomZones(customZones);
+    }
+  };
+
+  const handleRemoveZone = async (zone) => {
+    const updated = customZones.filter((z) => z !== zone);
+    setCustomZones(updated);
+    try {
+      await setSafezones(updated);
+    } catch {
+      setCustomZones(customZones);
     }
   };
 
@@ -153,6 +188,53 @@ export default function TaskPanel() {
 
       <div className="border-t border-border" />
 
+      {/* Safe Zones */}
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Safe Zones</SectionLabel>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Rooms where the patient is allowed. An alert fires when they leave all safe zones for 3 consecutive checks.
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {defaultZones.map((z) => (
+            <span key={z} className="inline-flex items-center px-2.5 py-1 text-[11px] text-muted-foreground opacity-45" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+              {z}
+            </span>
+          ))}
+          {customZones.map((z) => (
+            <span key={z} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-foreground" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+              {z}
+              <button
+                className="bg-transparent border-none text-muted-foreground cursor-pointer text-[13px] leading-none p-0 hover:text-foreground"
+                onClick={() => handleRemoveZone(z)}
+                title={`Remove ${z}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-1.5">
+          <input
+            className={inputCls + " flex-1"}
+            style={inputStyle}
+            type="text"
+            placeholder="Add a room (e.g. garden)"
+            value={newZone}
+            onChange={(e) => setNewZone(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAddZone()}
+          />
+          <button
+            className="px-3 py-2 text-[13px] font-medium cursor-pointer border-none transition-opacity hover:opacity-90"
+            style={{ background: "var(--accent)", color: "var(--foreground)" }}
+            onClick={handleAddZone}
+          >
+            Add
+          </button>
+        </div>
+      </section>
+
+      <div className="border-t border-border" />
+
       {/* Memory Montage */}
       <section className="flex flex-col gap-2">
         <SectionLabel>Memory Montage</SectionLabel>
@@ -211,6 +293,7 @@ export default function TaskPanel() {
             [C1, "Situation grounding"],
             [C3, "Activity reminder"],
             [CD, "Wandering alert"],
+            [CD, "Wandering escalated"],
             [C4, "Conversation assist"],
             [C5, "Montage ready"],
             [C1, "Check-in"],
