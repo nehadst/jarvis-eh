@@ -1,8 +1,8 @@
 {
   "last_activity": {
-    "time": 1772936142.6354287,
-    "activity": "unknown",
-    "location_hint": ""
+    "time": 1772936661.50768,
+    "activity": "painting a wall",
+    "location_hint": "blue tape on the bottom left"
   },
   "continuity_reminders": [
     {
@@ -59,6 +59,11 @@
       "timestamp": 1772936136.4439223,
       "activity": "playing a rubik's cube",
       "message": "Hashim, you were so focused on your Rubik's cube. It's right here beside you."
+    },
+    {
+      "timestamp": 1772936653.43794,
+      "activity": "solving a rubik's cube",
+      "message": "Hashim, you were working on your Rubik's cube right here on the table. Would you like to try a move?"
     }
   ],
   "active_patient_task": {
