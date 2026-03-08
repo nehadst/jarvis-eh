@@ -19,13 +19,13 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
   const activeMontage = montageDismissed ? null : (montageEvent ?? latestMontage);
 
   return (
-    <div className="relative min-h-screen grid bg-background text-foreground" style={{ gridTemplateRows: "auto 1fr" }}>
+    <div className="relative h-screen grid bg-background text-foreground overflow-hidden" style={{ gridTemplateRows: "auto 1fr" }}>
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-background">
         <div className="flex items-center gap-3">
           <span className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">Rewind</span>
           <span className="text-border">·</span>
-          <span className="text-[17px] font-semibold tracking-tight text-foreground">Caregiver Dashboard</span>
+          <span className="text-[17px] font-normal tracking-tight text-foreground">Caregiver Dashboard</span>
         </div>
 
         <div className="flex gap-2.5 items-center">
