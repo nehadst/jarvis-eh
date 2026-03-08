@@ -44,9 +44,12 @@ export async function addTask(task, setBy = "caregiver") {
 
 /**
  * Trigger a memory montage for a family member.
+ * @param {string} personId
+ * @param {string} [tag] - optional Cloudinary tag filter, e.g. "christmas"
  */
-export async function triggerMontage(personId) {
-  const res = await fetch(`/api/montage/${personId}`, { method: "POST" });
+export async function triggerMontage(personId, tag) {
+  const url = tag ? `/api/montage/${personId}?tag=${encodeURIComponent(tag)}` : `/api/montage/${personId}`;
+  const res = await fetch(url, { method: "POST" });
   return res.json();
 }
 
@@ -55,5 +58,91 @@ export async function triggerMontage(personId) {
  */
 export async function fetchFamily() {
   const res = await fetch("/api/family");
+  return res.json();
+}
+
+/**
+ * Set who is currently home (feeds into grounding messages).
+ * @param {string} whoIsHome - e.g. "David, Sarah"
+ */
+export async function setHousehold(whoIsHome) {
+  const res = await fetch("/api/household", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ who_is_home: whoIsHome }),
+  });
+  return res.json();
+}
+
+/**
+ * Get current household context.
+ */
+export async function getHousehold() {
+  const res = await fetch("/api/household");
+  return res.json();
+}
+
+/**
+ * Manually trigger an immediate grounding message.
+ */
+export async function triggerGrounding() {
+  const res = await fetch("/api/grounding/trigger", { method: "POST" });
+  return res.json();
+}
+
+/**
+ * Get current safe zones (defaults merged with caregiver custom zones).
+ * Returns { safe_zones: string[], custom_zones: string[] }
+ */
+export async function getSafezones() {
+  const res = await fetch("/api/safezones");
+  return res.json();
+}
+
+/**
+ * Update the caregiver-defined safe zone list.
+ * @param {string[]} zones - full list of custom zones to persist
+ */
+export async function setSafezones(zones) {
+  const res = await fetch("/api/safezones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ safe_zones: zones }),
+  });
+  return res.json();
+}
+
+/**
+ * Create or update a family member profile.
+ */
+export async function saveFamily(personId, profile) {
+  const res = await fetch(`/api/family/${personId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+  });
+  return res.json();
+}
+
+/**
+ * Upload face photos for a family member.
+ * @param {string} personId
+ * @param {FileList|File[]} files
+ */
+export async function uploadFacePhotos(personId, files) {
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  const res = await fetch(`/api/family/${personId}/photos`, {
+    method: "POST",
+    body: form,
+  });
+  return res.json();
+}
+
+/**
+ * Delete a family member and their photos.
+ */
+export async function deleteFamily(personId) {
+  const res = await fetch(`/api/family/${personId}`, { method: "DELETE" });
   return res.json();
 }

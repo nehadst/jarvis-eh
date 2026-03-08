@@ -11,6 +11,9 @@ Usage (from main.py):
     thread.start()
 """
 
+from __future__ import annotations
+
+import logging
 import threading
 from queue import Queue, Empty, Full
 from typing import Callable
@@ -26,6 +29,36 @@ from features.face_recognition.recognizer import FaceRecognizer
 from features.situation_grounding.grounder import SituationGrounder
 from features.activity_continuity.tracker import ActivityTracker
 from features.wandering_guardian.guardian import WanderingGuardian
+
+logger = logging.getLogger(__name__)
+
+# Lazy-import heavy native packages (cv2, numpy, capture modules).
+# The server starts cleanly even when these are not installed; capture
+# simply won't work until the packages are available.
+try:
+    import cv2
+    import numpy as np
+    _cv2_available = True
+except ImportError:
+    cv2 = None  # type: ignore[assignment]
+    np = None   # type: ignore[assignment]
+    _cv2_available = False
+    logger.warning("cv2/numpy not available — capture & MJPEG disabled")
+
+try:
+    from capture.frame_capture import FrameCapture
+except ImportError:
+    FrameCapture = None  # type: ignore[misc,assignment]
+
+try:
+    from capture.glasses_capture import GlassesCapture
+except ImportError:
+    GlassesCapture = None  # type: ignore[misc,assignment]
+
+try:
+    from capture.mock_capture import MockCapture
+except ImportError:
+    MockCapture = None  # type: ignore[misc,assignment]
 
 
 class Orchestrator:
@@ -48,15 +81,24 @@ class Orchestrator:
         # Capture source — allow explicit override (used by tests/VideoFileCapture)
         if capture is not None:
             self._capture = capture
-        elif settings.capture_mode == "glasses":
+        elif settings.capture_mode == "glasses" and GlassesCapture is not None:
             self._capture = GlassesCapture(
                 host=settings.glasses_ws_host,
                 port=settings.glasses_ws_port,
             )
-        elif settings.capture_mode in ("webcam", "video"):
+        elif settings.capture_mode in ("webcam", "video") and MockCapture is not None:
             self._capture = MockCapture()
-        else:
+        elif FrameCapture is not None:
             self._capture = FrameCapture()
+        else:
+            self._capture = None
+
+        if self._capture is None:
+            logger.warning(
+                "No capture backend available for mode=%s — "
+                "capture will not start until the required packages are installed.",
+                settings.capture_mode,
+            )
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -66,8 +108,16 @@ class Orchestrator:
         self.grounder.set_active_task(task, set_by)
         self.tracker.set_active_task(task)
 
+    def clear_active_task(self) -> None:
+        """Remove the current task (caregiver marks it done or cancels it)."""
+        self.active_task = None
+        self.grounder.clear_active_task()
+
     def trigger_manual_grounding(self) -> None:
         """Grab a fresh frame and force a grounding message immediately."""
+        if self._capture is None:
+            logger.warning("trigger_manual_grounding called but no capture backend")
+            return
         frame = self._capture.grab_once()
         self.grounder.trigger_manual(frame)
 
@@ -77,6 +127,10 @@ class Orchestrator:
         Ingests frames at full speed for the MJPEG stream.
         AI processing runs on a separate background thread so it never blocks display.
         """
+        if self._capture is None:
+            logger.error("Cannot start capture — no backend available")
+            return
+
         self.is_running = True
         print("[Orchestrator] Capture loop started.")
 
@@ -119,21 +173,17 @@ class Orchestrator:
 
             frame_count += 1
 
-            # ── Feature 1: Face Recognition (every AI frame) ─────────────
+            # ── Face Recognition (every AI frame) ────────────────────────
             self.face_recognizer.process(frame)
 
-            # Pass face count to activity tracker for conversation suppression
-            face_count = self._count_faces(frame)
-            self.tracker.set_faces_visible(face_count)
-
-            # ── Feature 3: Situation Grounding (every 10th AI frame) ─────
+            # ── Situation Grounding (every 10th AI frame) ────────────────
             if frame_count % 10 == 0:
                 self.grounder.process(frame)
 
-            # ── Feature 4: Activity Continuity (every AI frame) ──────────
+            # ── Activity Continuity (every AI frame) ─────────────────────
             self.tracker.process(frame)
 
-            # ── Feature 9: Wandering Guardian (every 10th AI frame) ──────
+            # ── Wandering Guardian (every 10th AI frame) ─────────────────
             if frame_count % 10 == 0:
                 self.guardian.process(frame)
 
