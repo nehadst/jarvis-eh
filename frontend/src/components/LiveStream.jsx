@@ -64,7 +64,7 @@ export default function LiveStream({ captureRunning }) {
   if (!captureRunning) {
     return (
       <div className="flex items-center justify-center h-full" style={{ background: "oklch(0.08 0 0)" }}>
-        <span className="text-[15px] text-muted-foreground">Start capture to see live feed</span>
+        <span className="text-[16px] text-foreground">Start capture to see live feed</span>
       </div>
     );
   }

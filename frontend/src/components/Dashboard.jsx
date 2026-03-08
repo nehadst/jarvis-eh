@@ -6,6 +6,8 @@ import LiveStream from "./LiveStream.jsx";
 import MontagePlayer from "./MontagePlayer.jsx";
 import FamilySetup from "./FamilySetup.jsx";
 
+const C2 = "oklch(0.645 0.246 16.439)";
+
 export default function Dashboard({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
   const [montageEvent, setMontageEvent] = useState(null);
   const [montageDismissed, setMontageDismissed] = useState(false);
@@ -18,28 +20,38 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
   return (
     <div className="min-h-screen grid bg-background text-foreground" style={{ gridTemplateRows: "auto 1fr" }}>
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-card">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
         <div className="flex items-center gap-3">
-          <span className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">Rewind</span>
+          <span className="text-[15px] font-semibold tracking-widest text-muted-foreground uppercase">Rewind</span>
           <span className="text-border">·</span>
-          <span className="text-[15px] font-semibold tracking-tight text-foreground">Caregiver Dashboard</span>
+          <span className="text-[17px] font-semibold tracking-tight text-foreground">Caregiver Dashboard</span>
         </div>
 
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-3 items-center">
           {/* Connection status */}
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
-            connected
-              ? "bg-green-950/60 text-green-400 ring-1 ring-green-900"
-              : "bg-red-950/60 text-red-400 ring-1 ring-red-900"
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
+          <span
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 text-[13px] font-semibold"
+            style={connected ? {
+              background: `color-mix(in oklch, ${C2} 12%, transparent)`,
+              color: C2,
+              boxShadow: `0 0 0 1px color-mix(in oklch, ${C2} 25%, transparent)`,
+            } : {
+              background: "color-mix(in oklch, var(--destructive) 12%, transparent)",
+              color: "var(--destructive)",
+              boxShadow: "0 0 0 1px color-mix(in oklch, var(--destructive) 25%, transparent)",
+            }}
+          >
+            <span
+              className="w-2 h-2"
+              style={{ background: connected ? C2 : "var(--destructive)" }}
+            />
             {connected ? "Live" : "Disconnected"}
           </span>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+          <div className="flex gap-1 bg-muted p-1">
             <button
-              className={`px-3 py-1.5 rounded-md text-[12px] font-semibold transition-all cursor-pointer border-none ${
+              className={`px-4 py-2 text-[14px] font-semibold transition-all cursor-pointer border-none ${
                 tab === "live"
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground bg-transparent"
@@ -49,7 +61,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
               Live
             </button>
             <button
-              className={`px-3 py-1.5 rounded-md text-[12px] font-semibold transition-all cursor-pointer border-none ${
+              className={`px-4 py-2 text-[14px] font-semibold transition-all cursor-pointer border-none ${
                 tab === "family"
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground bg-transparent"
@@ -63,11 +75,10 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           {/* Glasses view link */}
           <Link
             to="/glasses"
-            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors"
+            className="px-4 py-2 text-[14px] font-semibold transition-colors"
             style={{
-              color: "#a5b4fc",
-              background: "rgba(99,102,241,0.1)",
-              border: "1px solid rgba(99,102,241,0.2)",
+              color: "var(--primary-foreground)",
+              background: "var(--primary)",
             }}
           >
             Glasses View →
@@ -76,7 +87,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           {/* Mode selector */}
           {!captureRunning && (
             <select
-              className="px-2.5 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer outline-none bg-accent border border-border text-foreground"
+              className="px-3 py-2 text-[14px] font-semibold cursor-pointer outline-none bg-accent border border-border text-foreground"
               value={captureMode}
               onChange={(e) => onCaptureMode(e.target.value)}
             >
@@ -88,15 +99,16 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           {/* Capture toggle */}
           {captureRunning ? (
             <button
-              className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white cursor-pointer border-none transition-opacity hover:opacity-90 bg-destructive"
+              className="px-5 py-2 text-[14px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+              style={{ background: "var(--destructive)", color: "var(--primary-foreground)" }}
               onClick={onStopCapture}
             >
               Stop Capture
             </button>
           ) : (
             <button
-              className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white cursor-pointer border-none transition-opacity hover:opacity-90"
-              style={{ background: "oklch(0.45 0.15 145)" }}
+              className="px-5 py-2 text-[14px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+              style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
               onClick={() => onStartCapture(captureMode)}
             >
               Start Capture

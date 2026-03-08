@@ -1,10 +1,17 @@
 import { useState, useEffect } from "react";
 import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding } from "../api/client.js";
 
-const inputCls = "w-full px-3 py-2.5 rounded-lg text-[13px] font-sans text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring transition-colors";
+const C1 = "oklch(0.81 0.117 11.638)";
+const C2 = "oklch(0.645 0.246 16.439)";
+const C3 = "oklch(0.586 0.253 17.585)";
+const C4 = "oklch(0.514 0.222 16.935)";
+const C5 = "oklch(0.455 0.188 13.697)";
+const CD = "oklch(0.704 0.191 22.216)";
+
+const inputCls = "w-full px-3 py-2.5 text-[13px] font-sans text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring transition-colors";
 const inputStyle = { background: "var(--muted)", border: "1px solid var(--border)" };
 
-const btnCls = "w-full py-2.5 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90";
+const btnCls = "w-full py-2.5 text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90";
 
 export default function TaskPanel() {
   const [task, setTask] = useState("");
@@ -97,7 +104,7 @@ export default function TaskPanel() {
         >
           Update
         </button>
-        {householdSaved && <p className="text-[12px] text-green-400">Saved!</p>}
+        {householdSaved && <p className="text-[12px]" style={{ color: C2 }}>Saved!</p>}
       </section>
 
       {/* Caregiver Task */}
@@ -120,7 +127,7 @@ export default function TaskPanel() {
         >
           Send to Patient
         </button>
-        {sent && <p className="text-[12px] text-green-400">Task sent!</p>}
+        {sent && <p className="text-[12px]" style={{ color: C2 }}>Task sent!</p>}
       </section>
 
       {/* Manual Grounding */}
@@ -131,13 +138,13 @@ export default function TaskPanel() {
         </p>
         <button
           className={btnCls}
-          style={{ background: "oklch(0.45 0.15 145)", color: "#fff" }}
+          style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
           onClick={handleGrounding}
           disabled={grounding}
         >
           {grounding ? "Triggering…" : "Ground Now"}
         </button>
-        {groundingTriggered && <p className="text-[12px] text-green-400">Triggered!</p>}
+        {groundingTriggered && <p className="text-[12px]" style={{ color: C2 }}>Triggered!</p>}
       </section>
 
       {/* Memory Montage */}
@@ -172,13 +179,17 @@ export default function TaskPanel() {
             />
             <button
               className={btnCls}
-              style={{ background: "rgba(96,165,250,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.25)" }}
+              style={{
+                background: `color-mix(in oklch, ${C5} 15%, transparent)`,
+                color: C5,
+                border: `1px solid color-mix(in oklch, ${C5} 30%, transparent)`,
+              }}
               onClick={handleMontage}
               disabled={montaging}
             >
               {montaging ? "Building…" : "Generate Montage"}
             </button>
-            {montageSent && <p className="text-[12px]" style={{ color: "#60a5fa" }}>Building — watch the event feed.</p>}
+            {montageSent && <p className="text-[12px]" style={{ color: C5 }}>Building — watch the event feed.</p>}
           </>
         )}
       </section>
@@ -188,15 +199,18 @@ export default function TaskPanel() {
         <SectionLabel>Quick Reference</SectionLabel>
         <div className="flex flex-col gap-1">
           {[
-            ["#818cf8", "Face recognized"],
-            ["#34d399", "Situation grounding"],
-            ["#fbbf24", "Activity reminder"],
-            ["#f87171", "Wandering alert"],
-            ["#a78bfa", "Conversation assist"],
-            ["#60a5fa", "Montage ready"],
+            [C2, "Face recognized"],
+            [C1, "Situation grounding"],
+            [C3, "Activity reminder"],
+            [CD, "Wandering alert"],
+            [C4, "Conversation assist"],
+            [C5, "Montage ready"],
+            [C1, "Check-in"],
+            [C3, "Task reminder"],
+            [C2, "Task complete"],
           ].map(([color, label]) => (
             <div key={label} className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+              <span className="w-2 h-2 flex-shrink-0" style={{ background: color }} />
               <span className="text-[11px] text-muted-foreground">{label}</span>
             </div>
           ))}
@@ -208,7 +222,7 @@ export default function TaskPanel() {
 
 function SectionLabel({ children }) {
   return (
-    <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+    <p className="text-[12px] font-bold uppercase tracking-widest text-foreground">
       {children}
     </p>
   );
