@@ -5,6 +5,7 @@ import TaskPanel from "./TaskPanel.jsx";
 import LiveStream from "./LiveStream.jsx";
 import MontagePlayer from "./MontagePlayer.jsx";
 import FamilySetup from "./FamilySetup.jsx";
+import { LightRays } from "./ui/light-rays.jsx";
 
 const C2 = "oklch(0.645 0.246 16.439)";
 
@@ -18,9 +19,9 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
   const activeMontage = montageDismissed ? null : (montageEvent ?? latestMontage);
 
   return (
-    <div className="min-h-screen grid bg-background text-foreground" style={{ gridTemplateRows: "auto 1fr" }}>
+    <div className="relative min-h-screen grid bg-background text-foreground" style={{ gridTemplateRows: "auto 1fr" }}>
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-card">
+      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-background">
         <div className="flex items-center gap-3">
           <span className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">Rewind</span>
           <span className="text-border">·</span>
@@ -119,9 +120,10 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
 
       {/* Body */}
       <div
-        className="grid overflow-hidden"
+        className="relative grid overflow-hidden"
         style={{ gridTemplateColumns: "1fr 340px", height: "calc(100vh - 57px)" }}
       >
+        <LightRays color="oklch(0.645 0.246 16.439 / 0.08)" count={5} blur={50} speed={18} className="z-50" />
         {tab === "live" ? (
           <LiveStream captureRunning={captureRunning} />
         ) : (
@@ -140,6 +142,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
         event={activeMontage}
         onClose={() => { setMontageEvent(null); setMontageDismissed(true); }}
       />
+
     </div>
   );
 }
