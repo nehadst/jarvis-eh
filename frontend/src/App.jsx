@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./components/Dashboard.jsx";
+import GlassesView from "./components/GlassesView.jsx";
 import { connectWebSocket } from "./api/client.js";
 
 export default function App() {
@@ -31,15 +33,22 @@ export default function App() {
     setCaptureRunning(false);
   };
 
+  const sharedProps = {
+    events,
+    connected,
+    captureRunning,
+    captureMode,
+    onCaptureMode: setCaptureMode,
+    onStartCapture: startCapture,
+    onStopCapture: stopCapture,
+  };
+
   return (
-    <Dashboard
-      events={events}
-      connected={connected}
-      captureRunning={captureRunning}
-      captureMode={captureMode}
-      onCaptureMode={setCaptureMode}
-      onStartCapture={startCapture}
-      onStopCapture={stopCapture}
-    />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Dashboard {...sharedProps} />} />
+        <Route path="/glasses" element={<GlassesView {...sharedProps} />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

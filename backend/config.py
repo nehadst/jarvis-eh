@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # Backboard.io
     backboard_api_key: str = ""
-    backboard_project_id: str = ""
+    backboard_assistant_id: str = ""
 
     # Capture source: "glasses" | "screen" | "webcam" | "video"
     capture_mode: str = "glasses"

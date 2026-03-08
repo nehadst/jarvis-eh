@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import EventFeed from "./EventFeed.jsx";
 import TaskPanel from "./TaskPanel.jsx";
 import LiveStream from "./LiveStream.jsx";
@@ -78,6 +79,17 @@ const styles = {
     overflow: "hidden",
     borderLeft: "1px solid #1e1e2e",
   },
+  glassesLink: {
+    padding: "6px 14px",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#818cf8",
+    textDecoration: "none",
+    background: "rgba(79, 70, 229, 0.12)",
+    border: "1px solid rgba(79, 70, 229, 0.25)",
+    transition: "background 0.15s",
+  },
 };
 
 export default function Dashboard({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
@@ -99,6 +111,7 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
           </span>
           <button style={styles.tabBtn(tab === "live")} onClick={() => setTab("live")}>Live</button>
           <button style={styles.tabBtn(tab === "family")} onClick={() => setTab("family")}>Family Setup</button>
+          <Link to="/glasses" style={styles.glassesLink}>Glasses View →</Link>
           {!captureRunning && (
             <select
               style={styles.modeSelect}
