@@ -1,8 +1,8 @@
 {
   "last_activity": {
-    "time": 60.0,
-    "activity": "watching tv",
-    "location_hint": "remote on the table"
+    "time": 1772930005.7641122,
+    "activity": "unknown",
+    "location_hint": ""
   },
   "continuity_reminders": [
     {
@@ -14,6 +14,22 @@
       "timestamp": 45.0,
       "activity": "watching tv",
       "message": "That's what you were doing. Let's get back to it."
+    },
+    {
+      "timestamp": 45.0,
+      "activity": "watching tv",
+      "message": "That's what you were doing. Let's get back to it."
+    }
+  ],
+  "active_patient_task": {
+    "task": "data\\test_videos\\WhatsApp Video 2026-03-07 at 3.05.34 PM.mp4",
+    "set_by": "caregiver"
+  },
+  "wandering_events": [
+    {
+      "timestamp": 1772924878.7216175,
+      "scene": "hotel front desk",
+      "message": "Nehad, honey, let's go back to the house, I've got your favorite tea waiting."
     }
   ]
 }

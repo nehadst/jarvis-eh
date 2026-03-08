@@ -20,8 +20,23 @@ class GeminiClient:
         if not settings.gemini_api_key:
             raise ValueError("GEMINI_API_KEY is not set in .env")
         genai.configure(api_key=settings.gemini_api_key)
-        self._text_model = genai.GenerativeModel("gemini-2.0-flash")
-        self._vision_model = genai.GenerativeModel("gemini-2.0-flash")
+        # Prefer model from settings but provide sensible fallbacks for new users
+        preferred = getattr(settings, "gemini_model", "gemini-2.5-flash-lite")
+        fallback_list = [preferred, "gemini-2.5-flash-lite", "gemini-2.1", "gemini-1.5", "gemini-1.0"]
+
+        last_exc = None
+        for model_name in fallback_list:
+            try:
+                self._text_model = genai.GenerativeModel(model_name)
+                self._vision_model = genai.GenerativeModel(model_name)
+                print(f"[GeminiClient] Using model: {model_name}")
+                break
+            except Exception as e:
+                last_exc = e
+                continue
+        else:
+            # If none of the models could be loaded, re-raise the last exception
+            raise last_exc
 
     def generate(self, prompt: str) -> str:
         """Send a text-only prompt and return the response string."""

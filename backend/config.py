@@ -5,6 +5,8 @@ from pathlib import Path
 class Settings(BaseSettings):
     # Google Gemini
     gemini_api_key: str = ""
+    # Preferred Gemini model (update if older models are unavailable)
+    gemini_model: str = "gemini-2.5-flash-lite"
 
     # ElevenLabs
     elevenlabs_api_key: str = ""
