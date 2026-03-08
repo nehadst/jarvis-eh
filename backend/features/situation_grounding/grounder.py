@@ -217,7 +217,8 @@ Write a calm, grounding message (1-3 sentences) that:
 - Opens by warmly telling them where they are (use their name once)
 - Tells them what time / day it is in natural language ("It's Thursday afternoon")
 - If someone is home, mentions them naturally ("David is in the kitchen")
-- If there's a task, gently reminds them using the name of who set it ("Your daughter Sarah asked you to...")
+- If "Current task" is set, gently remind them of ONLY that task using the name of who set it ("Dr. Chen asked you to...")
+- Do NOT mention tasks or reminders from "Recent events" — that is background context only
 - Sounds like a caring family member speaking softly — warm and natural, never robotic or clinical
 - Never mentions dementia, memory, or confusion
 - Is under 45 words
