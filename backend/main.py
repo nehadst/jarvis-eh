@@ -204,6 +204,15 @@ async def get_task():
     return {"task": None}
 
 
+@app.delete("/api/tasks")
+async def clear_task():
+    """Caregiver marks the current task as done or cancels it."""
+    if orchestrator:
+        orchestrator.clear_active_task()
+        return {"ok": True}
+    return {"ok": False}
+
+
 @app.post("/api/household")
 async def set_household(body: dict):
     """
