@@ -114,6 +114,11 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+@keyframes rewind-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
