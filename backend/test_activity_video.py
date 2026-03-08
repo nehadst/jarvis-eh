@@ -2,7 +2,8 @@
 Focused Activity Continuity test on a real video file.
 
 Runs ONLY the ActivityTracker — no face recognition, no wandering guardian.
-Prints per-frame motion level so you can tune the confusion threshold.
+Prints per-frame motion level and confusion state so you can see when
+the reminder fires and what guards are active.
 
 Usage (from backend/):
     python test_activity_video.py "<path_to_video.mp4>"
@@ -21,7 +22,11 @@ import numpy as np
 sys.path.insert(0, ".")
 
 from capture.frame_capture import VideoFileCapture
-from features.activity_continuity.tracker import ActivityTracker, MOTION_THRESHOLD
+from features.activity_continuity.tracker import (
+    ActivityTracker,
+    MOTION_THRESHOLD,
+    CONFUSION_SECONDS,
+)
 
 
 def motion_bar(fraction: float, width: int = 30) -> str:
@@ -54,9 +59,10 @@ def main():
     print("=" * 60)
     print(f"Video : {args.video}")
     print(f"Task  : {args.task or '(none)'}")
-    print(f"Motion threshold: {MOTION_THRESHOLD:.0%} of frame pixels")
-    print(f"  Frames below threshold = CONFUSED (still)")
-    print(f"  Frames above threshold = ACTIVE (moving)")
+    print(f"Motion threshold : {MOTION_THRESHOLD:.0%} of frame pixels")
+    print(f"Confusion trigger: {CONFUSION_SECONDS}s of stillness")
+    print(f"  Frames below threshold = STILL")
+    print(f"  Frames above threshold = ACTIVE")
     print("=" * 60)
     print()
 
@@ -79,11 +85,20 @@ def main():
             _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
             total = gray.shape[0] * gray.shape[1]
             fraction = float(np.sum(thresh)) / (255.0 * total)
-            confused = fraction < MOTION_THRESHOLD
-            status = "STILL" if confused else "moving"
+            is_still = fraction < MOTION_THRESHOLD
+            status = "STILL" if is_still else "moving"
+
+            # Show state machine info
+            still_dur = ""
+            if tracker._still_since is not None:
+                import time as _t
+                dur = _t.time() - tracker._still_since
+                still_dur = f" still={dur:.1f}s"
+
             print(
                 f"Frame {frame_count:3d} | {motion_bar(fraction)} | "
-                f"{status} | confusion_count={tracker._confusion_count}"
+                f"{status:7s} | active={tracker._was_active}"
+                f"{still_dur}"
             )
         prev_gray = gray
 

@@ -14,6 +14,7 @@ Usage (from main.py):
 import time
 from typing import Callable
 
+import cv2
 from capture.frame_capture import FrameCapture
 from features.face_recognition.recognizer import FaceRecognizer
 from features.situation_grounding.grounder import SituationGrounder
@@ -61,6 +62,10 @@ class Orchestrator:
             # ── Feature 1: Face Recognition (every frame) ─────────────────
             self.face_recognizer.process(frame)
 
+            # Pass face count to activity tracker for conversation suppression
+            face_count = self._count_faces(frame)
+            self.tracker.set_faces_visible(face_count)
+
             # ── Feature 3: Situation Grounding (every 10 frames ≈ 5s) ──────
             if frame_count % 10 == 0:
                 self.grounder.process(frame)
@@ -77,3 +82,17 @@ class Orchestrator:
     def stop(self) -> None:
         self.is_running = False
         self._capture.stop()
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _count_faces(frame) -> int:
+        """Fast haar-cascade face count for conversation detection."""
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+        )
+        return len(faces)

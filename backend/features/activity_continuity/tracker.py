@@ -8,13 +8,17 @@ retrieves the last known activity and generates a gentle reminder:
   "You were making tea. The kettle is on the counter to your left."
   "You were reading your book. It's on the arm of your chair."
 
+Robustness guards:
+  - Requires 5 seconds of continuous stillness (not just a few frames)
+  - Suppresses reminders when multiple faces are visible (conversation)
+  - Asks Gemini to confirm confusion before speaking
+  - Filters out sedentary/unknown activities (no false reminders for "watching TV")
+  - Requires the person to have been moving recently before stillness counts
+
 Activity inference:
   - Sends every Nth frame to Gemini Vision with a structured prompt
   - Returns a short activity description: "making tea", "watching TV", "reading"
   - Stored in a time-stamped rolling buffer
-
-Object context (optional future improvement):
-  - YOLOv8 can be added here for object detection to enrich descriptions
 """
 
 import time
@@ -41,12 +45,19 @@ REMINDER_COOLDOWN = 45
 BUFFER_DURATION = 90
 
 # Fraction of frame pixels that must change to count as "motion".
-# Below this fraction → person is still (confused). Real-world video noise
+# Below this fraction → person is still. Real-world video noise
 # alone accounts for ~0.1–0.5%; genuine motion is typically >2%.
 MOTION_THRESHOLD = 0.02  # 2% of frame pixels
 
-# How many consecutive still frames before we consider the person confused
-CONFUSION_FRAMES = 3
+# How many seconds of continuous stillness before we consider confusion.
+# At 2 FPS this is ~6 consecutive still frames.
+CONFUSION_SECONDS = 3
+
+# Activities where being still is normal — don't trigger confusion for these.
+SEDENTARY_ACTIVITIES = {
+    "watching tv", "reading", "reading a book", "sleeping", "napping",
+    "resting", "sitting", "relaxing", "meditating", "listening to music",
+}
 
 
 class ActivityTracker:
@@ -57,20 +68,28 @@ class ActivityTracker:
         self._active_task: str | None = None
         self._last_infer_time = 0.0
         self._last_reminder_time = 0.0
-        self._confusion_count = 0
         self._prev_frame: np.ndarray | None = None
+
+        # Confusion state machine
+        self._still_since: float | None = None   # timestamp when stillness began
+        self._was_active: bool = False            # had meaningful motion before stillness
+        self._faces_visible: int = 0              # updated externally or via detection
 
     # ── Public ────────────────────────────────────────────────────────────────
 
     def set_active_task(self, task: str) -> None:
         self._active_task = task
 
+    def set_faces_visible(self, count: int) -> None:
+        """Called by the orchestrator with the face count each frame."""
+        self._faces_visible = count
+
     def process(self, frame: np.ndarray) -> None:
         """
         Called on every frame.
         1. Periodically infers the current activity and stores it.
-        2. Detects confusion via motion heuristics.
-        3. On confusion, delivers a continuity reminder.
+        2. Detects confusion via motion heuristics + guards.
+        3. On confusion, confirms with Gemini, then delivers a continuity reminder.
         """
         now = time.time()
 
@@ -84,14 +103,67 @@ class ActivityTracker:
             self._last_infer_time = now
             self._infer_and_store(frame)
 
-        # Detect confusion via stillness
-        if self._detect_confusion(frame):
-            self._confusion_count += 1
-            if self._confusion_count >= CONFUSION_FRAMES and (now - self._last_reminder_time) >= REMINDER_COOLDOWN:
-                self._confusion_count = 0
-                self._deliver_reminder()
-        else:
-            self._confusion_count = max(0, self._confusion_count - 1)
+        # Motion detection
+        is_still = self._detect_stillness(frame)
+
+        if not is_still:
+            # Person is moving — reset stillness timer, mark as active
+            self._still_since = None
+            self._was_active = True
+            return
+
+        # Person is still — start or continue the stillness timer
+        if self._still_since is None:
+            self._still_since = now
+
+        still_duration = now - self._still_since
+
+        # Guard 1: Must have been active before this stillness period
+        if not self._was_active:
+            print(f"[ActivityTracker] Guard 1 BLOCKED: not previously active")
+            return
+
+        # Guard 2: Must be still for at least CONFUSION_SECONDS
+        if still_duration < CONFUSION_SECONDS:
+            return
+
+        print(f"[ActivityTracker] Stillness threshold met ({still_duration:.1f}s) — checking guards...")
+
+        # Guard 3: Cooldown — don't repeat reminders too soon
+        if (now - self._last_reminder_time) < REMINDER_COOLDOWN:
+            print(f"[ActivityTracker] Guard 3 BLOCKED: cooldown ({now - self._last_reminder_time:.0f}s < {REMINDER_COOLDOWN}s)")
+            return
+
+        # Guard 4: Multiple faces visible → likely a conversation, skip
+        if self._faces_visible > 1:
+            print(f"[ActivityTracker] Guard 4 BLOCKED: {self._faces_visible} faces visible")
+            return
+
+        # Guard 5/6: Find the most recent meaningful (non-unknown) activity.
+        # Don't use get_last_activity() — that returns the absolute last entry
+        # which may be "unknown" even if earlier entries are valid.
+        last = next(
+            (e for e in reversed(list(self._buffer)) if e["activity"].lower() not in ("unknown", "")),
+            None,
+        )
+
+        # Guard 5: No meaningful activity in the buffer → nothing to remind
+        if not last:
+            print(f"[ActivityTracker] Guard 5 BLOCKED: no meaningful activity in buffer")
+            return
+
+        # Guard 6: Most recent meaningful activity is sedentary — stillness is expected
+        if last["activity"].lower() in SEDENTARY_ACTIVITIES:
+            print(f"[ActivityTracker] Guard 6 BLOCKED: activity '{last['activity']}' is sedentary")
+            return
+
+        print(f"[ActivityTracker] All guards passed — delivering reminder...")
+
+        # All guards passed — deliver reminder
+        self._deliver_reminder(frame)
+        # Reset state
+        self._still_since = None
+        self._was_active = False
 
     def get_last_activity(self) -> dict | None:
         """Return the most recent activity entry from the buffer."""
@@ -128,13 +200,10 @@ class ActivityTracker:
         except Exception as e:
             print(f"[ActivityTracker] Infer error: {e}")
 
-    def _detect_confusion(self, frame: np.ndarray) -> bool:
+    def _detect_stillness(self, frame: np.ndarray) -> bool:
         """
-        Simple frame-diff motion heuristic.
-        Extended still period → person is confused / lost.
-
-        Uses a fraction of total frame pixels so the threshold scales
-        correctly for any resolution (SD, HD, etc.).
+        Frame-diff motion heuristic.
+        Returns True if the person is still (below motion threshold).
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (21, 21), 0)
@@ -146,20 +215,53 @@ class ActivityTracker:
         _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
         total_pixels = gray.shape[0] * gray.shape[1]
         changed_fraction = np.sum(thresh) / (255.0 * total_pixels)
-        return changed_fraction < MOTION_THRESHOLD  # True = still / confused
+        return changed_fraction < MOTION_THRESHOLD
 
-    def _deliver_reminder(self) -> None:
-        """Find the activity from ~10-30 seconds ago and deliver a reminder."""
+    def _confirm_confusion(self, frame: np.ndarray) -> bool:
+        """
+        Ask Gemini to visually confirm the person looks confused/lost,
+        not just pausing intentionally or talking to someone.
+        """
+        if not gemini:
+            return True  # no Gemini → skip confirmation, fire anyway
+
+        try:
+            answer = gemini.analyze_image(
+                frame,
+                "A person who was previously active has suddenly stopped moving. "
+                "Do they look confused, lost, or like they've forgotten what they were doing? "
+                "Signs of confusion: staring blankly, looking around, frozen mid-task. "
+                "Signs of FINE: clearly resting, talking, or deliberately pausing. "
+                "Answer with exactly one word: CONFUSED or FINE.",
+            )
+            result = answer.strip().lower()
+            print(f"[ActivityTracker] Confusion confirmation: '{answer.strip()}'")
+            return "confused" in result
+        except Exception as e:
+            print(f"[ActivityTracker] Confirm error: {e}")
+            return True  # on error, err on the side of helpfulness
+
+    def _deliver_reminder(self, frame: np.ndarray) -> None:
+        """Find the last meaningful activity and deliver a reminder."""
         now = time.time()
         self._last_reminder_time = now
 
-        # Look for an activity 10-30s ago (before confusion started)
+        # Prefer an entry from 10-60s ago (before confusion started).
+        # Fall back to the most recent meaningful entry.
         target_activity = None
         for entry in reversed(list(self._buffer)):
+            if entry["activity"].lower() in ("unknown", ""):
+                continue
             age = now - entry["time"]
             if 10 <= age <= 60:
                 target_activity = entry
                 break
+        if target_activity is None:
+            # Fall back to most recent non-unknown entry
+            for entry in reversed(list(self._buffer)):
+                if entry["activity"].lower() not in ("unknown", ""):
+                    target_activity = entry
+                    break
 
         if not target_activity:
             return
@@ -168,9 +270,10 @@ class ActivityTracker:
         location_hint = target_activity["location_hint"]
 
         reminder_text = self._generate_reminder(activity, location_hint)
+        print(f"[ActivityTracker] Delivering reminder: '{reminder_text}'")
 
         if tts and reminder_text:
-            tts.speak(reminder_text)
+            tts.speak(reminder_text, blocking=True)
 
         memory.append("continuity_reminders", {
             "timestamp": now,

@@ -1,8 +1,8 @@
 {
   "last_activity": {
-    "time": 1772930977.6951945,
-    "activity": "writing",
-    "location_hint": "papers on the desk"
+    "time": 1772934784.2436388,
+    "activity": "unknown",
+    "location_hint": ""
   },
   "continuity_reminders": [
     {
@@ -29,6 +29,21 @@
       "timestamp": 1772930980.4075446,
       "activity": "writing",
       "message": "Nehad, you were writing. Your pen is right here."
+    },
+    {
+      "timestamp": 1772932545.280059,
+      "activity": "writing a question",
+      "message": "Nehad, you were just writing a question, dear. Your pen is right here."
+    },
+    {
+      "timestamp": 1772933064.7482111,
+      "activity": "writing",
+      "message": "Nehad, it looks like you were writing. Your pen is right here."
+    },
+    {
+      "timestamp": 1772934784.276199,
+      "activity": "solving a rubik's cube",
+      "message": "Nehad, you were working on your Rubik's cube. It's right here beside you."
     }
   ],
   "active_patient_task": {
