@@ -11,7 +11,7 @@ const CD = "oklch(0.704 0.191 22.216)";
 const inputCls = "w-full px-3 py-2.5 text-[13px] font-sans text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring transition-colors";
 const inputStyle = { background: "var(--muted)", border: "1px solid var(--border)" };
 
-const btnCls = "w-full py-2.5 text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90";
+const btnCls = "w-full py-2.5 text-[13px] font-medium cursor-pointer border-none transition-opacity hover:opacity-90";
 
 export default function TaskPanel() {
   const [task, setTask] = useState("");
@@ -107,6 +107,8 @@ export default function TaskPanel() {
         {householdSaved && <p className="text-[12px]" style={{ color: C2 }}>Saved!</p>}
       </section>
 
+      <div className="border-t border-border" />
+
       {/* Caregiver Task */}
       <section className="flex flex-col gap-2">
         <SectionLabel>Set Patient Task</SectionLabel>
@@ -130,6 +132,8 @@ export default function TaskPanel() {
         {sent && <p className="text-[12px]" style={{ color: C2 }}>Task sent!</p>}
       </section>
 
+      <div className="border-t border-border" />
+
       {/* Manual Grounding */}
       <section className="flex flex-col gap-2">
         <SectionLabel>Manual Grounding</SectionLabel>
@@ -146,6 +150,8 @@ export default function TaskPanel() {
         </button>
         {groundingTriggered && <p className="text-[12px]" style={{ color: C2 }}>Triggered!</p>}
       </section>
+
+      <div className="border-t border-border" />
 
       {/* Memory Montage */}
       <section className="flex flex-col gap-2">
@@ -194,6 +200,8 @@ export default function TaskPanel() {
         )}
       </section>
 
+      <div className="border-t border-border" />
+
       {/* Quick Reference */}
       <section className="flex flex-col gap-2">
         <SectionLabel>Quick Reference</SectionLabel>
@@ -222,7 +230,7 @@ export default function TaskPanel() {
 
 function SectionLabel({ children }) {
   return (
-    <p className="text-[12px] font-bold uppercase tracking-widest text-foreground">
+    <p className="text-[12px] font-medium uppercase tracking-widest text-foreground">
       {children}
     </p>
   );
