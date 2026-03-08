@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
+import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones, removeSafezone, getContext, setContext } from "../api/client.js";
 
 const C1 = "oklch(0.81 0.117 11.638)";
 const C2 = "oklch(0.645 0.246 16.439)";
@@ -33,6 +33,17 @@ export default function TaskPanel() {
   const [defaultZones, setDefaultZones] = useState([]);
   const [newZone, setNewZone] = useState("");
 
+  const [contextDesc, setContextDesc] = useState("");
+  const [contextSaved, setContextSaved] = useState(false);
+
+  const refreshZones = async () => {
+    const data = await getSafezones();
+    const custom = data?.custom_zones || [];
+    const all = data?.safe_zones || [];
+    setCustomZones(custom);
+    setDefaultZones(all.filter((z) => !custom.includes(z)));
+  };
+
   useEffect(() => {
     fetchFamily()
       .then((data) => {
@@ -43,13 +54,9 @@ export default function TaskPanel() {
     getHousehold()
       .then((data) => setWhoIsHome(data?.who_is_home || ""))
       .catch(() => {});
-    getSafezones()
-      .then((data) => {
-        setCustomZones(data?.custom_zones || []);
-        const all = data?.safe_zones || [];
-        const custom = data?.custom_zones || [];
-        setDefaultZones(all.filter((z) => !custom.includes(z)));
-      })
+    refreshZones().catch(() => {});
+    getContext()
+      .then((data) => setContextDesc(data?.description || ""))
       .catch(() => {});
   }, []);
 
@@ -93,22 +100,28 @@ export default function TaskPanel() {
     const zone = newZone.trim().toLowerCase();
     if (!zone || customZones.includes(zone)) return;
     const updated = [...customZones, zone];
-    setCustomZones(updated);
+    setCustomZones(updated); // optimistic update — appears instantly
     setNewZone("");
     try {
       await setSafezones(updated);
+      await refreshZones(); // sync exact server state
     } catch {
-      setCustomZones(customZones);
+      setCustomZones(customZones); // rollback on failure
     }
   };
 
+  const handleSaveContext = async () => {
+    await setContext(contextDesc.trim());
+    setContextSaved(true);
+    setTimeout(() => setContextSaved(false), 2000);
+  };
+
   const handleRemoveZone = async (zone) => {
-    const updated = customZones.filter((z) => z !== zone);
-    setCustomZones(updated);
     try {
-      await setSafezones(updated);
+      await removeSafezone(zone);
+      await refreshZones();
     } catch {
-      setCustomZones(customZones);
+      await refreshZones();
     }
   };
 
@@ -196,8 +209,15 @@ export default function TaskPanel() {
         </p>
         <div className="flex flex-wrap gap-1.5">
           {defaultZones.map((z) => (
-            <span key={z} className="inline-flex items-center px-2.5 py-1 text-[11px] text-muted-foreground opacity-45" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+            <span key={z} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-muted-foreground" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
               {z}
+              <button
+                className="bg-transparent border-none text-muted-foreground cursor-pointer text-[13px] leading-none p-0 hover:text-foreground"
+                onClick={() => handleRemoveZone(z)}
+                title={`Remove ${z}`}
+              >
+                ×
+              </button>
             </span>
           ))}
           {customZones.map((z) => (
@@ -231,6 +251,31 @@ export default function TaskPanel() {
             Add
           </button>
         </div>
+      </section>
+
+      <div className="border-t border-border" />
+
+      {/* Situational Context */}
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Current Situation</SectionLabel>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Tell the AI where the patient is right now. Wandering alerts won't fire while they're in an expected location.
+        </p>
+        <textarea
+          className={inputCls}
+          style={{ ...inputStyle, minHeight: 60, resize: "vertical" }}
+          placeholder="e.g. At a church community event until 3pm"
+          value={contextDesc}
+          onChange={(e) => setContextDesc(e.target.value)}
+        />
+        <button
+          className={btnCls}
+          style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+          onClick={handleSaveContext}
+        >
+          Save
+        </button>
+        {contextSaved && <p className="text-[12px]" style={{ color: C2 }}>Saved!</p>}
       </section>
 
       <div className="border-t border-border" />

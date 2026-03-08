@@ -113,6 +113,35 @@ export async function setSafezones(zones) {
 }
 
 /**
+ * Remove a single safe zone by name (works for both defaults and custom zones).
+ * @param {string} zone
+ */
+export async function removeSafezone(zone) {
+  const res = await fetch(`/api/safezones/${encodeURIComponent(zone)}`, { method: "DELETE" });
+  return res.json();
+}
+
+/** Get the current caregiver situational context. */
+export async function getContext() {
+  const res = await fetch("/api/context");
+  return res.json();
+}
+
+/**
+ * Set situational context describing where the patient is supposed to be.
+ * Pass an empty string to clear.
+ * @param {string} description
+ */
+export async function setContext(description) {
+  const res = await fetch("/api/context", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ description }),
+  });
+  return res.json();
+}
+
+/**
  * Create or update a family member profile.
  */
 export async function saveFamily(personId, profile) {
