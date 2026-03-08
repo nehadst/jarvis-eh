@@ -1,6 +1,6 @@
 {
   "last_activity": {
-    "time": 1772934784.2436388,
+    "time": 1772936142.6354287,
     "activity": "unknown",
     "location_hint": ""
   },
@@ -44,6 +44,21 @@
       "timestamp": 1772934784.276199,
       "activity": "solving a rubik's cube",
       "message": "Nehad, you were working on your Rubik's cube. It's right here beside you."
+    },
+    {
+      "timestamp": 1772935627.2858536,
+      "activity": "speaking into a microphone",
+      "message": "Hashim, you were speaking into your microphone. It's right there on your shirt."
+    },
+    {
+      "timestamp": 1772935785.4350157,
+      "activity": "talking to the camera",
+      "message": "Hashim, remember you were talking to your special camera friend. It's right there on your shirt."
+    },
+    {
+      "timestamp": 1772936136.4439223,
+      "activity": "playing a rubik's cube",
+      "message": "Hashim, you were so focused on your Rubik's cube. It's right here beside you."
     }
   ],
   "active_patient_task": {

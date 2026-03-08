@@ -53,11 +53,23 @@ MOTION_THRESHOLD = 0.02  # 2% of frame pixels
 # At 2 FPS this is ~6 consecutive still frames.
 CONFUSION_SECONDS = 3
 
-# Activities where being still is normal — don't trigger confusion for these.
-SEDENTARY_ACTIVITIES = {
-    "watching tv", "reading", "reading a book", "sleeping", "napping",
-    "resting", "sitting", "relaxing", "meditating", "listening to music",
+# Keywords that indicate the activity is NOT a real task — either sedentary
+# or a conversation.  We match these as substrings so Gemini's varied
+# phrasings ("talking to the camera", "speaking on the phone") all get caught.
+_SKIP_KEYWORDS = {
+    # conversation / social
+    "talk", "speak", "chat", "convers", "call", "discuss",
+    "listen", "interview",
+    # sedentary / restful
+    "watch", "read", "sleep", "nap", "rest", "sit", "relax",
+    "meditat", "pray",
 }
+
+
+def _is_skippable(activity: str) -> bool:
+    """Return True if the activity is a conversation or sedentary — not a real task."""
+    low = activity.lower()
+    return low in ("unknown", "") or any(kw in low for kw in _SKIP_KEYWORDS)
 
 
 class ActivityTracker:
@@ -139,22 +151,16 @@ class ActivityTracker:
             print(f"[ActivityTracker] Guard 4 BLOCKED: {self._faces_visible} faces visible")
             return
 
-        # Guard 5/6: Find the most recent meaningful (non-unknown) activity.
-        # Don't use get_last_activity() — that returns the absolute last entry
-        # which may be "unknown" even if earlier entries are valid.
-        last = next(
-            (e for e in reversed(list(self._buffer)) if e["activity"].lower() not in ("unknown", "")),
+        # Guard 5: Find the most recent REAL TASK activity in the buffer.
+        # Skip unknown, conversation, and sedentary activities — those aren't
+        # tasks worth reminding about.
+        last_task = next(
+            (e for e in reversed(list(self._buffer)) if not _is_skippable(e["activity"])),
             None,
         )
 
-        # Guard 5: No meaningful activity in the buffer → nothing to remind
-        if not last:
-            print(f"[ActivityTracker] Guard 5 BLOCKED: no meaningful activity in buffer")
-            return
-
-        # Guard 6: Most recent meaningful activity is sedentary — stillness is expected
-        if last["activity"].lower() in SEDENTARY_ACTIVITIES:
-            print(f"[ActivityTracker] Guard 6 BLOCKED: activity '{last['activity']}' is sedentary")
+        if not last_task:
+            print(f"[ActivityTracker] Guard 5 BLOCKED: no real task in buffer")
             return
 
         print(f"[ActivityTracker] All guards passed — delivering reminder...")
@@ -242,24 +248,24 @@ class ActivityTracker:
             return True  # on error, err on the side of helpfulness
 
     def _deliver_reminder(self, frame: np.ndarray) -> None:
-        """Find the last meaningful activity and deliver a reminder."""
+        """Find the last real task activity and deliver a reminder."""
         now = time.time()
         self._last_reminder_time = now
 
-        # Prefer an entry from 10-60s ago (before confusion started).
-        # Fall back to the most recent meaningful entry.
+        # Prefer a real-task entry from 10-60s ago (before confusion started).
+        # Fall back to the most recent real-task entry.
+        # Always skip conversations and sedentary activities.
         target_activity = None
         for entry in reversed(list(self._buffer)):
-            if entry["activity"].lower() in ("unknown", ""):
+            if _is_skippable(entry["activity"]):
                 continue
             age = now - entry["time"]
             if 10 <= age <= 60:
                 target_activity = entry
                 break
         if target_activity is None:
-            # Fall back to most recent non-unknown entry
             for entry in reversed(list(self._buffer)):
-                if entry["activity"].lower() not in ("unknown", ""):
+                if not _is_skippable(entry["activity"]):
                     target_activity = entry
                     break
 
