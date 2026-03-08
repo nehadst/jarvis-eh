@@ -82,5 +82,11 @@
       "activity": "coding on computer",
       "message": "\"Hi Dad, you were coding on your computer; your keyboard is right under your hands if you'd like to continue.\""
     }
+  ],
+  "household_context": {
+    "who_is_home": "Sarah, David"
+  },
+  "safe_zones": [
+    "garden"
   ]
 }

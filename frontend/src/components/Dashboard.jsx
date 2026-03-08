@@ -161,7 +161,6 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
       </header>
 
       <div style={styles.body}>
-      <div style={styles.body}>
         {tab === "live" ? (
           <LiveStream captureRunning={captureRunning} />
         ) : (
