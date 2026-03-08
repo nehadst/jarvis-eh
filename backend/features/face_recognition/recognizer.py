@@ -45,6 +45,7 @@ class FaceRecognizer:
 
         # Lazy-import to avoid circular deps; builder is created once on first use
         self._montage_builder = None
+        self._deepface_available: bool | None = None  # None = not yet attempted
 
     # ── Public ────────────────────────────────────────────────────────────────
 
@@ -60,13 +61,23 @@ class FaceRecognizer:
         if not self._face_is_present(frame):
             return
 
+        # Lazy import — avoids pandas/pyarrow/numpy-1.x crash at startup.
+        # Guard runs before temp file is written to avoid a leak on ImportError.
+        try:
+            from deepface import DeepFace
+        except ImportError as e:
+            if self._deepface_available is not False:
+                print(f"[FaceRecognizer] DeepFace unavailable, face recognition disabled: {e}")
+            self._deepface_available = False
+            return
+        self._deepface_available = True
+
         # Save frame to a temp file — DeepFace.find expects a path
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             cv2.imwrite(tmp.name, frame)
             tmp_path = tmp.name
 
         try:
-            from deepface import DeepFace  # lazy: avoids pandas/pyarrow/numpy-1.x crash at startup
             results = DeepFace.find(
                 img_path=tmp_path,
                 db_path=str(FACE_DB_PATH),
