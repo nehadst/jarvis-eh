@@ -16,7 +16,9 @@ Endpoints:
   POST /api/capture/start          — start the live frame-capture loop
   POST /api/capture/stop           — stop the loop
   GET  /api/stream                 — live MJPEG view of the glasses feed
-  POST /api/montage/{person_id}    — manually trigger a memory montage
+  POST /api/montage/{person_id}    — on-demand memory montage (optional ?tag=christmas)
+  GET  /api/safezones              — get current safe zone list
+  POST /api/safezones              — update safe zone list
   WS   /ws                         — real-time event stream to the dashboard
 """
 
@@ -28,15 +30,15 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
 
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from config import settings, FACE_DB_PATH, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
 from services.backboard_client import memory
+from features.wandering_guardian.guardian import DEFAULT_SAFE_ZONES
 from features.memory_montage.builder import MontageBuilder
 
 
@@ -128,7 +130,7 @@ async def list_family():
 async def get_family_member(person_id: str):
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     if not path.exists():
-        return {"error": "not found"}, 404
+        raise HTTPException(status_code=404, detail="Family member not found")
     return json.loads(path.read_text())
 
 
@@ -138,6 +140,10 @@ async def update_family_member(person_id: str, body: dict):
     FAMILY_PROFILES_PATH.mkdir(parents=True, exist_ok=True)
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     path.write_text(json.dumps(body, indent=2))
+    # Hot-reload so the running recognizer sees the new/updated profile
+    # without requiring a server restart.
+    if orchestrator:
+        orchestrator.face_recognizer.reload_profiles()
     return {"ok": True}
 
 
@@ -288,10 +294,10 @@ async def trigger_montage(
     """
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     if not path.exists():
-        return {"error": "Person not found"}, 404
+        raise HTTPException(status_code=404, detail="Person not found")
 
     if not montage_builder:
-        return {"error": "Montage service not initialised"}, 503
+        raise HTTPException(status_code=503, detail="Montage service not initialised")
 
     # Run in a background thread so the HTTP response returns immediately
     def _run():
@@ -306,6 +312,35 @@ async def trigger_montage(
         "person_id": person_id,
         "tag_filter": tag,
     }
+
+
+@app.get("/api/safezones")
+async def get_safezones():
+    """
+    Return the current safe zone list (caregiver-stored zones merged with
+    the built-in defaults).
+    """
+    stored = memory.retrieve("safe_zones")
+    custom: list[str] = stored if isinstance(stored, list) else []
+    all_zones = sorted(DEFAULT_SAFE_ZONES | {z.lower() for z in custom})
+    return {"safe_zones": all_zones, "custom_zones": custom}
+
+
+@app.post("/api/safezones")
+async def set_safezones(body: dict):
+    """
+    Update the caregiver-defined safe zone list.
+    Body: {"safe_zones": ["garden", "sunroom"]}
+    Only the *custom* (non-default) zones need to be stored; the guardian
+    merges them with DEFAULT_SAFE_ZONES at runtime.
+    """
+    zones = body.get("safe_zones", [])
+    if not isinstance(zones, list):
+        raise HTTPException(status_code=400, detail="safe_zones must be a list")
+    # Persist only the custom additions (deduplicated, lowercased)
+    custom = sorted({z.lower().strip() for z in zones if z.strip()})
+    memory.store("safe_zones", custom)
+    return {"ok": True, "safe_zones": custom}
 
 
 # ─── Live Stream ─────────────────────────────────────────────────────────

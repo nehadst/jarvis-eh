@@ -13,21 +13,46 @@ Usage (from main.py):
 
 from __future__ import annotations
 
+import logging
 import threading
 from queue import Queue, Empty, Full
 from typing import Callable
 
-import cv2
-import numpy as np
-
 from config import settings
-from capture.frame_capture import FrameCapture
-from capture.glasses_capture import GlassesCapture
-from capture.mock_capture import MockCapture
 from features.face_recognition.recognizer import FaceRecognizer
 from features.situation_grounding.grounder import SituationGrounder
 from features.activity_continuity.tracker import ActivityTracker
 from features.wandering_guardian.guardian import WanderingGuardian
+
+logger = logging.getLogger(__name__)
+
+# Lazy-import heavy native packages (cv2, numpy, capture modules).
+# The server starts cleanly even when these are not installed; capture
+# simply won't work until the packages are available.
+try:
+    import cv2
+    import numpy as np
+    _cv2_available = True
+except ImportError:
+    cv2 = None  # type: ignore[assignment]
+    np = None   # type: ignore[assignment]
+    _cv2_available = False
+    logger.warning("cv2/numpy not available — capture & MJPEG disabled")
+
+try:
+    from capture.frame_capture import FrameCapture
+except ImportError:
+    FrameCapture = None  # type: ignore[misc,assignment]
+
+try:
+    from capture.glasses_capture import GlassesCapture
+except ImportError:
+    GlassesCapture = None  # type: ignore[misc,assignment]
+
+try:
+    from capture.mock_capture import MockCapture
+except ImportError:
+    MockCapture = None  # type: ignore[misc,assignment]
 
 
 class Orchestrator:
@@ -35,10 +60,10 @@ class Orchestrator:
         self.event_callback = event_callback or (lambda e: None)
         self.is_running = False
         self.active_task: str | None = None
-        self._latest_frame: np.ndarray | None = None
+        self._latest_frame = None
         self._frame_lock = threading.Lock()
         self.frame_id: int = 0
-        self._ai_queue: Queue[np.ndarray] = Queue(maxsize=2)
+        self._ai_queue: Queue = Queue(maxsize=2)
         self._ai_thread: threading.Thread | None = None
 
         # Feature modules
@@ -48,15 +73,23 @@ class Orchestrator:
         self.guardian = WanderingGuardian(on_event=self.event_callback)
 
         # Capture source
-        if settings.capture_mode == "glasses":
+        self._capture = None
+        if settings.capture_mode == "glasses" and GlassesCapture is not None:
             self._capture = GlassesCapture(
                 host=settings.glasses_ws_host,
                 port=settings.glasses_ws_port,
             )
-        elif settings.capture_mode in ("webcam", "video"):
+        elif settings.capture_mode in ("webcam", "video") and MockCapture is not None:
             self._capture = MockCapture()
-        else:
+        elif FrameCapture is not None:
             self._capture = FrameCapture()
+
+        if self._capture is None:
+            logger.warning(
+                "No capture backend available for mode=%s — "
+                "capture will not start until the required packages are installed.",
+                settings.capture_mode,
+            )
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -73,6 +106,9 @@ class Orchestrator:
 
     def trigger_manual_grounding(self) -> None:
         """Grab a fresh frame and force a grounding message immediately."""
+        if self._capture is None:
+            logger.warning("trigger_manual_grounding called but no capture backend")
+            return
         frame = self._capture.grab_once()
         self.grounder.trigger_manual(frame)
 
@@ -82,6 +118,10 @@ class Orchestrator:
         Ingests frames at full speed for the MJPEG stream.
         AI processing runs on a separate background thread so it never blocks display.
         """
+        if self._capture is None:
+            logger.error("Cannot start capture — no backend available")
+            return
+
         self.is_running = True
         print("[Orchestrator] Capture loop started.")
 
@@ -142,8 +182,10 @@ class Orchestrator:
 
     def get_latest_jpeg(self) -> bytes | None:
         """Return the latest frame as JPEG bytes with face overlay (thread-safe)."""
+        if not _cv2_available:
+            return None
         # Glasses mode (H.264): get decoded numpy frame directly
-        if hasattr(self._capture, 'get_latest_frame'):
+        if self._capture is not None and hasattr(self._capture, 'get_latest_frame'):
             frame = self._capture.get_latest_frame()
         else:
             # Screen/webcam/video: read from orchestrator's own buffer
@@ -156,17 +198,18 @@ class Orchestrator:
 
     def wait_for_frame(self, timeout: float = 0.1) -> bool:
         """Block until a new frame arrives from the capture source."""
-        if hasattr(self._capture, 'wait_for_frame'):
+        if self._capture is not None and hasattr(self._capture, 'wait_for_frame'):
             return self._capture.wait_for_frame(timeout)
         return True  # screen capture: just return immediately
 
     @property
     def stream_frame_id(self) -> int:
         """Frame ID that updates the instant a new frame arrives (not gated by AI queue)."""
-        if hasattr(self._capture, 'frame_id'):
+        if self._capture is not None and hasattr(self._capture, 'frame_id'):
             return self._capture.frame_id
         return self.frame_id
 
     def stop(self) -> None:
         self.is_running = False
-        self._capture.stop()
+        if self._capture is not None:
+            self._capture.stop()

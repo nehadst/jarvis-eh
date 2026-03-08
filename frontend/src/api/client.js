@@ -91,6 +91,28 @@ export async function triggerGrounding() {
 }
 
 /**
+ * Get current safe zones (defaults merged with caregiver custom zones).
+ * Returns { safe_zones: string[], custom_zones: string[] }
+ */
+export async function getSafezones() {
+  const res = await fetch("/api/safezones");
+  return res.json();
+}
+
+/**
+ * Update the caregiver-defined safe zone list.
+ * @param {string[]} zones - full list of custom zones to persist
+ */
+export async function setSafezones(zones) {
+  const res = await fetch("/api/safezones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ safe_zones: zones }),
+  });
+  return res.json();
+}
+
+/**
  * Create or update a family member profile.
  */
 export async function saveFamily(personId, profile) {
