@@ -60,7 +60,12 @@ class MotionSensor:
         else:
             self._still_frames = 0
 
-        if self._still_frames >= STILL_FRAME_LIMIT:
+        # Update world state for confusion detector
+        is_still = self._still_frames >= STILL_FRAME_LIMIT
+        self._bus.update_world("is_still", is_still)
+        self._bus.update_world("still_frames", self._still_frames)
+
+        if is_still:
             self._still_frames = 0  # reset so it doesn't fire every frame
             self._bus.emit(Signal(
                 type=SignalType.STILLNESS,
@@ -69,6 +74,7 @@ class MotionSensor:
             ))
 
         # ── Oscillating motion (back-and-forth pacing) ────────────────────
+        is_oscillating = False
         if len(self._motion_history) == 10:
             diffs = [
                 abs(self._motion_history[i] - self._motion_history[i - 1])
@@ -79,8 +85,10 @@ class MotionSensor:
                 if (diffs[i] > MOTION_THRESHOLD) != (diffs[i - 1] > MOTION_THRESHOLD)
             )
             if oscillations >= 5:
+                is_oscillating = True
                 self._bus.emit(Signal(
                     type=SignalType.OSCILLATING_MOTION,
                     priority=Priority.NORMAL,
                     data={"oscillations": oscillations},
                 ))
+        self._bus.update_world("is_oscillating", is_oscillating)

@@ -86,6 +86,7 @@ class ActivitySensor:
             }
             self._buffer.append(entry)
             memory.store("last_activity", entry)
+            memory.append("activity_log", entry)
 
             # Update world state
             self._bus.update_world("last_activity", entry)

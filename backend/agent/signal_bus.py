@@ -16,6 +16,7 @@ from typing import Any
 
 class SignalType(Enum):
     FACE_DETECTED = "face_detected"
+    FACE_DEPARTED = "face_departed"
     STILLNESS = "stillness"
     OSCILLATING_MOTION = "oscillating_motion"
     SCENE_CLASSIFIED = "scene_classified"
@@ -25,6 +26,8 @@ class SignalType(Enum):
     TASK_SET = "task_set"
     CONVERSATION_LOOP = "conversation_loop"
     CONVERSATION_TOPIC = "conversation_topic"
+    VOICE_COMMAND = "voice_command"
+    CONFUSION = "confusion"
 
 
 class Priority(IntEnum):
@@ -37,6 +40,7 @@ class Priority(IntEnum):
 # Default TTL per signal type (seconds)
 _DEFAULT_TTL: dict[SignalType, float] = {
     SignalType.FACE_DETECTED: 10.0,
+    SignalType.FACE_DEPARTED: 15.0,
     SignalType.STILLNESS: 5.0,
     SignalType.OSCILLATING_MOTION: 5.0,
     SignalType.SCENE_CLASSIFIED: 30.0,
@@ -46,12 +50,15 @@ _DEFAULT_TTL: dict[SignalType, float] = {
     SignalType.TASK_SET: 60.0,
     SignalType.CONVERSATION_LOOP: 10.0,
     SignalType.CONVERSATION_TOPIC: 10.0,
+    SignalType.VOICE_COMMAND: 10.0,
+    SignalType.CONFUSION: 15.0,
 }
 
 # Priority mapping per signal type
 SIGNAL_PRIORITY: dict[SignalType, Priority] = {
     SignalType.SCENE_UNSAFE: Priority.CRITICAL,
     SignalType.FACE_DETECTED: Priority.HIGH,
+    SignalType.FACE_DEPARTED: Priority.LOW,
     SignalType.MANUAL_GROUNDING: Priority.HIGH,
     SignalType.STILLNESS: Priority.NORMAL,
     SignalType.OSCILLATING_MOTION: Priority.NORMAL,
@@ -60,6 +67,8 @@ SIGNAL_PRIORITY: dict[SignalType, Priority] = {
     SignalType.CONVERSATION_LOOP: Priority.LOW,
     SignalType.CONVERSATION_TOPIC: Priority.LOW,
     SignalType.TASK_SET: Priority.LOW,
+    SignalType.VOICE_COMMAND: Priority.HIGH,
+    SignalType.CONFUSION: Priority.HIGH,
 }
 
 
@@ -95,6 +104,12 @@ class SignalBus:
             "last_spoken_time": 0.0,
             "active_task": None,
             "active_task_set_by": None,
+            "last_detected_face": None,
+            "recent_transcript": "",
+            "transcript_entries": [],
+            "is_still": False,
+            "still_frames": 0,
+            "is_oscillating": False,
         }
         self._world_lock = threading.Lock()
 

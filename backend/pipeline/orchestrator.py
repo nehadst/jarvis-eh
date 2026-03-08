@@ -21,11 +21,19 @@ from config import settings
 from features.encounter_recording.recorder import EncounterRecorder
 
 from agent.signal_bus import Signal, SignalBus, SignalType, Priority
+from agent.confusion_detector import ConfusionDetector
 from agent.jarvis import JarvisAgent
 from sensors.face_sensor import FaceSensor
 from sensors.motion_sensor import MotionSensor
 from sensors.scene_sensor import SceneSensor
 from sensors.activity_sensor import ActivitySensor
+
+try:
+    from sensors.audio_sensor import AudioSensor
+    _audio_available = True
+except ImportError:
+    AudioSensor = None  # type: ignore[misc,assignment]
+    _audio_available = False
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +87,12 @@ class Orchestrator:
         self.motion_sensor = MotionSensor(self._bus)
         self.scene_sensor = SceneSensor(self._bus)
         self.activity_sensor = ActivitySensor(self._bus)
+
+        # ── Audio Sensor (optional — requires sounddevice + openai)
+        self.audio_sensor = AudioSensor(self._bus) if _audio_available else None
+
+        # ── Confusion Detector (tiered: aggregates motion + scene + activity + audio)
+        self._confusion_detector = ConfusionDetector(self._bus)
 
         # ── Jarvis Agent ──────────────────────────────────────────────────
         self._agent = JarvisAgent(
@@ -155,6 +169,13 @@ class Orchestrator:
         self.is_running = True
         print("[Orchestrator] Capture loop started.")
 
+        # Start audio sensor (mic + transcription)
+        if self.audio_sensor:
+            self.audio_sensor.start()
+        else:
+            print("[Orchestrator] WARNING: Audio sensor not available — "
+                  "conversation recording will not work!")
+
         # Start AI worker in a separate thread
         self._ai_thread = threading.Thread(target=self._ai_worker, daemon=True)
         self._ai_thread.start()
@@ -210,6 +231,9 @@ class Orchestrator:
             # ── Activity Sensor (every AI frame — has internal timer) ─────
             self.activity_sensor.process(frame)
 
+            # ── Confusion Detector tick (aggregates evidence, emits CONFUSION)
+            self._confusion_detector.tick()
+
             # ── Jarvis Agent tick ─────────────────────────────────────────
             self._agent.tick()
 
@@ -246,6 +270,8 @@ class Orchestrator:
     def stop(self) -> None:
         self.is_running = False
         self.encounter_recorder.stop()
+        if self.audio_sensor:
+            self.audio_sensor.stop()
         if self._capture:
             self._capture.stop()
 

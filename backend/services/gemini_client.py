@@ -147,17 +147,18 @@ class AIClient:
         personal_detail: str,
         patient_name: str,
     ) -> str:
+        detail_line = f"\nA personal detail: {personal_detail}" if personal_detail else ""
         return f"""You are a gentle AI assistant helping a person with dementia recognize someone in front of them.
 
 Person recognized: {name}
 Their relationship: {relationship}
-Last interaction: {last_interaction}
-A personal detail: {personal_detail}
+Last interaction: {last_interaction}{detail_line}
 Patient's name: {patient_name}
 
 Write a warm, calm, 1-2 sentence whisper that:
 - Tells the patient who they're looking at
-- Mentions one memorable fact to spark connection
+- ONLY mention facts that appear above (last interaction, personal detail). Do NOT invent memories, stories, or details.
+- If no specific details are provided, just say who the person is and their relationship warmly.
 - Sounds natural, NOT robotic
 - Is under 30 words
 
