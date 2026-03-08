@@ -3,23 +3,30 @@ import { Link } from "react-router-dom";
 
 const WS_STREAM_URL = "ws://localhost:8000/ws/stream";
 
-const TYPE_CONFIG = {
-  face_recognized: { label: "Face Recognized", color: "#818cf8", icon: "👤" },
-  situation_grounding: { label: "Grounding", color: "#34d399", icon: "🏠" },
-  activity_continuity: { label: "Activity Reminder", color: "#fbbf24", icon: "🔄" },
-  wandering_detected: { label: "Wandering Alert", color: "#f87171", icon: "⚠️" },
-  conversation_assist: { label: "Conversation Assist", color: "#a78bfa", icon: "💬" },
-  montage_ready: { label: "Montage Ready", color: "#60a5fa", icon: "🎬" },
-};
-
 export default function GlassesView({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [showControls, setShowControls] = useState(true);
   const hideTimer = useRef(null);
-  const [visibleEvents, setVisibleEvents] = useState([]);
 
-  // Auto-hide controls after inactivity
+  // ── Overlay state ──────────────────────────────────────────────────────
+  const [faceCard, setFaceCard] = useState(null);
+  const [groundingBanner, setGroundingBanner] = useState(null);
+  const [activityReminder, setActivityReminder] = useState(null);
+  const [wanderingAlert, setWanderingAlert] = useState(null);
+  const [conversationWhisper, setConversationWhisper] = useState(null);
+  const [activeTask, setActiveTask] = useState(null);
+  const [hudContext, setHudContext] = useState(null);
+
+  // ── Timers ─────────────────────────────────────────────────────────────
+  const faceCardTimer = useRef(null);
+  const groundingTimer = useRef(null);
+  const activityTimer = useRef(null);
+  const wanderingTimer = useRef(null);
+  const whisperTimer = useRef(null);
+  const lastEventRef = useRef(null);
+
+  // ── Auto-hide controls after inactivity ────────────────────────────────
   useEffect(() => {
     const reset = () => {
       setShowControls(true);
@@ -34,7 +41,7 @@ export default function GlassesView({ events, connected, captureRunning, capture
     };
   }, []);
 
-  // Stream frames to canvas
+  // ── Stream frames to canvas ────────────────────────────────────────────
   useEffect(() => {
     if (!captureRunning) return;
     let ws, rafId, latestBlob = null, stopped = false;
@@ -71,17 +78,89 @@ export default function GlassesView({ events, connected, captureRunning, capture
     return () => { stopped = true; cancelAnimationFrame(rafId); ws?.close(); };
   }, [captureRunning]);
 
-  // Show latest events as HUD toasts, auto-dismiss after 6s
+  // ── Fetch active task ──────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchTask = async () => {
+      try {
+        const res = await fetch("/api/tasks");
+        const data = await res.json();
+        setActiveTask(data.task || null);
+      } catch {}
+    };
+    fetchTask();
+    const interval = setInterval(fetchTask, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Process incoming events ────────────────────────────────────────────
   useEffect(() => {
     if (events.length === 0) return;
     const latest = events[0];
-    const id = Date.now() + Math.random();
-    setVisibleEvents((prev) => [{ ...latest, _id: id }, ...prev].slice(0, 5));
-    const timer = setTimeout(() => {
-      setVisibleEvents((prev) => prev.filter((e) => e._id !== id));
-    }, 6000);
-    return () => clearTimeout(timer);
-  }, [events.length]);
+    if (latest === lastEventRef.current) return;
+    lastEventRef.current = latest;
+
+    switch (latest.type) {
+      case "face_recognized": {
+        const name = latest.person || "Unknown";
+        const initials = name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+        const bbox = latest.bbox || { x: 0, y: 0, w: 100, h: 100 };
+        const frameW = latest.frame_size?.w || canvasRef.current?.width || 1280;
+        const frameH = latest.frame_size?.h || canvasRef.current?.height || 720;
+        const viewW = window.innerWidth;
+        const viewH = window.innerHeight;
+        let screenX = ((bbox.x + bbox.w / 2) / frameW) * viewW;
+        let screenY = (bbox.y / frameH) * viewH;
+        screenX = Math.max(170, Math.min(screenX, viewW - 170));
+        screenY = Math.max(160, screenY);
+
+        clearTimeout(faceCardTimer.current);
+        setFaceCard({ name, relationship: latest.relationship || "", whisper: latest.whisper || "", initials, screenX, screenY, key: Date.now() });
+        faceCardTimer.current = setTimeout(() => setFaceCard(null), 6500);
+        break;
+      }
+
+      case "situation_grounding": {
+        setHudContext({ scene: latest.scene, time: latest.time });
+        clearTimeout(groundingTimer.current);
+        setGroundingBanner({ message: latest.message, key: Date.now() });
+        groundingTimer.current = setTimeout(() => setGroundingBanner(null), 10000);
+        if (latest.task) setActiveTask(latest.task);
+        break;
+      }
+
+      case "activity_continuity": {
+        clearTimeout(activityTimer.current);
+        setActivityReminder({ activity: latest.activity, locationHint: latest.location_hint, message: latest.message, key: Date.now() });
+        activityTimer.current = setTimeout(() => setActivityReminder(null), 8000);
+        break;
+      }
+
+      case "wandering_detected": {
+        clearTimeout(wanderingTimer.current);
+        setWanderingAlert({ scene: latest.scene, message: latest.message, severity: latest.severity, key: Date.now() });
+        wanderingTimer.current = setTimeout(() => setWanderingAlert(null), 12000);
+        break;
+      }
+
+      case "conversation_assist": {
+        clearTimeout(whisperTimer.current);
+        setConversationWhisper({ whisper: latest.whisper, subject: latest.subject, key: Date.now() });
+        whisperTimer.current = setTimeout(() => setConversationWhisper(null), 7000);
+        break;
+      }
+    }
+  }, [events]);
+
+  // ── Cleanup all timers on unmount ──────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      clearTimeout(faceCardTimer.current);
+      clearTimeout(groundingTimer.current);
+      clearTimeout(activityTimer.current);
+      clearTimeout(wanderingTimer.current);
+      clearTimeout(whisperTimer.current);
+    };
+  }, []);
 
   return (
     <div ref={containerRef} style={styles.root}>
@@ -96,9 +175,9 @@ export default function GlassesView({ events, connected, captureRunning, capture
         </div>
       )}
 
-      {/* Top bar — fades on inactivity */}
+      {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <div style={{ ...styles.topBar, opacity: showControls ? 1 : 0 }}>
-        <Link to="/" style={styles.backLink}>← Dashboard</Link>
+        <Link to="/" style={styles.backLink}>Dashboard</Link>
         <div style={styles.topCenter}>
           <span style={styles.logo}>REWIND</span>
           <span style={styles.statusDot(connected)} />
@@ -123,25 +202,100 @@ export default function GlassesView({ events, connected, captureRunning, capture
         </div>
       </div>
 
-      {/* HUD event toasts — bottom-left */}
-      <div style={styles.toastContainer}>
-        {visibleEvents.map((evt) => {
-          const cfg = TYPE_CONFIG[evt.type] || { label: evt.type, color: "#9ca3af", icon: "•" };
-          const message = evt.whisper || evt.message || "";
-          return (
-            <div key={evt._id} style={styles.toast(cfg.color)}>
-              <div style={styles.toastHeader}>
-                <span>{cfg.icon}</span>
-                <span style={{ color: cfg.color, fontWeight: 700, fontSize: 12, textTransform: "uppercase" }}>{cfg.label}</span>
-                {evt.person && <span style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 13 }}>— {evt.person}</span>}
+      {/* ── Passive HUD — scene + time (top-left) ─────────────────────── */}
+      {captureRunning && hudContext && (
+        <div style={styles.hud}>
+          <div style={styles.hudDot} />
+          <span style={styles.hudText}>{hudContext.scene}</span>
+          <span style={styles.hudSep}>{"\u00B7"}</span>
+          <span style={styles.hudText}>{hudContext.time}</span>
+        </div>
+      )}
+
+      {/* ── Active Task Pill (top center, below bar) ──────────────────── */}
+      {activeTask && (
+        <div key={activeTask} style={styles.taskPill}>
+          <span style={styles.taskLabel}>TASK</span>
+          <span style={styles.taskText}>{activeTask}</span>
+        </div>
+      )}
+
+      {/* ── Face Recognition Card — floats above the person ───────────── */}
+      {faceCard && (
+        <div
+          key={faceCard.key}
+          style={{
+            position: "absolute",
+            left: faceCard.screenX,
+            top: faceCard.screenY,
+            transform: "translate(-50%, -100%)",
+            marginTop: -16,
+            zIndex: 20,
+            pointerEvents: "none",
+          }}
+        >
+          <div style={styles.faceCard}>
+            <div style={styles.faceCardHeader}>
+              <div style={styles.faceCardAvatar}>
+                <span style={styles.faceCardInitials}>{faceCard.initials}</span>
               </div>
-              {message && <p style={styles.toastMessage}>"{message}"</p>}
+              <div>
+                <div style={styles.faceCardName}>{faceCard.name}</div>
+                {faceCard.relationship && (
+                  <div style={styles.faceCardRelationship}>{faceCard.relationship}</div>
+                )}
+              </div>
             </div>
-          );
-        })}
+            {faceCard.whisper && (
+              <p style={styles.faceCardWhisper}>"{faceCard.whisper}"</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Wandering Alert (center screen, amber) ────────────────────── */}
+      {wanderingAlert && (
+        <div key={wanderingAlert.key} style={styles.wanderingOverlay}>
+          <div style={styles.wanderingCard}>
+            <div style={styles.wanderingIconRow}>
+              <div style={styles.wanderingDot} />
+              <span style={styles.wanderingLabel}>Gentle Redirect</span>
+            </div>
+            <p style={styles.wanderingMessage}>{wanderingAlert.message}</p>
+            <p style={styles.wanderingScene}>{wanderingAlert.scene}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Grounding Banner — full width at very bottom ──────────────── */}
+      {groundingBanner && (
+        <div key={groundingBanner.key} style={styles.groundingBanner}>
+          <p style={styles.groundingMessage}>{groundingBanner.message}</p>
+        </div>
+      )}
+
+      {/* ── Bottom card stack — activity + whisper above grounding ─────── */}
+      <div style={{ ...styles.bottomStack, bottom: groundingBanner ? 110 : 24 }}>
+        {activityReminder && (
+          <div key={activityReminder.key} style={styles.activityCard}>
+            <div style={styles.activityHeader}>
+              <div style={styles.activityDot} />
+              <span style={styles.activityLabel}>Activity Reminder</span>
+            </div>
+            <p style={styles.activityMessage}>{activityReminder.message}</p>
+          </div>
+        )}
+        {conversationWhisper && (
+          <div key={conversationWhisper.key} style={styles.whisperCard}>
+            <p style={styles.whisperText}>"{conversationWhisper.whisper}"</p>
+            {conversationWhisper.subject && (
+              <p style={styles.whisperSubject}>Re: {conversationWhisper.subject}</p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* AI processing indicator */}
+      {/* ── AI processing indicator ───────────────────────────────────── */}
       {captureRunning && (
         <div style={{ ...styles.aiIndicator, opacity: showControls ? 1 : 0.4 }}>
           <div style={styles.aiPulse} />
@@ -152,7 +306,8 @@ export default function GlassesView({ events, connected, captureRunning, capture
   );
 }
 
-const pulse = `
+// ── CSS keyframes ────────────────────────────────────────────────────────────
+const cssText = `
 @keyframes rewind-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(1.3); }
@@ -161,16 +316,60 @@ const pulse = `
   0%, 100% { transform: scale(1); opacity: 0.15; }
   50% { transform: scale(1.1); opacity: 0.25; }
 }
+@keyframes visionCardIn {
+  from { opacity: 0; transform: scale(0.85) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes visionCardOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.92) translateY(-4px); }
+}
+@keyframes groundingIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes groundingOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(20px); }
+}
+@keyframes overlayIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes overlayOut {
+  from { opacity: 1; }
+  to { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+@keyframes wanderingIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes wanderingOut {
+  from { opacity: 1; }
+  to { opacity: 0; transform: scale(0.93); }
+}
+@keyframes amberPulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(245, 158, 11, 0.1), 0 0 0 0.5px rgba(245, 158, 11, 0.15) inset; }
+  50% { box-shadow: 0 0 50px rgba(245, 158, 11, 0.25), 0 0 0 0.5px rgba(245, 158, 11, 0.3) inset; }
+}
+@keyframes hudFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes taskSlideIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 `;
 
-// Inject keyframes once
 if (typeof document !== "undefined" && !document.getElementById("rewind-glasses-css")) {
   const style = document.createElement("style");
   style.id = "rewind-glasses-css";
-  style.textContent = pulse;
+  style.textContent = cssText;
   document.head.appendChild(style);
 }
 
+// ── Styles ───────────────────────────────────────────────────────────────────
 const styles = {
   root: {
     position: "fixed",
@@ -211,7 +410,8 @@ const styles = {
     fontSize: 14,
     color: "#555",
   },
-  // Top bar
+
+  // ── Top bar — glassmorphic ────────────────────────────────────────────────
   topBar: {
     position: "absolute",
     top: 0,
@@ -221,7 +421,10 @@ const styles = {
     alignItems: "center",
     justifyContent: "space-between",
     padding: "14px 24px",
-    background: "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)",
+    background: "rgba(0, 0, 0, 0.2)",
+    backdropFilter: "blur(24px) saturate(150%)",
+    WebkitBackdropFilter: "blur(24px) saturate(150%)",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
     transition: "opacity 0.4s ease",
     zIndex: 10,
   },
@@ -230,7 +433,6 @@ const styles = {
     textDecoration: "none",
     fontSize: 14,
     fontWeight: 600,
-    transition: "color 0.15s",
   },
   topCenter: {
     display: "flex",
@@ -276,39 +478,320 @@ const styles = {
     background: active ? "#dc2626" : "#16a34a",
     color: "#fff",
   }),
-  // HUD toasts
-  toastContainer: {
+
+  // ── Passive HUD (top-left) ────────────────────────────────────────────────
+  hud: {
     position: "absolute",
-    bottom: 24,
+    top: 70,
     left: 24,
-    display: "flex",
-    flexDirection: "column-reverse",
-    gap: 10,
-    zIndex: 10,
-    maxWidth: 420,
-  },
-  toast: (color) => ({
-    background: "rgba(15, 15, 20, 0.85)",
-    backdropFilter: "blur(12px)",
-    border: `1px solid ${color}44`,
-    borderLeft: `3px solid ${color}`,
-    borderRadius: 10,
-    padding: "10px 16px",
-    animation: "rewind-pulse 0.3s ease-out",
-  }),
-  toastHeader: {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    marginBottom: 4,
+    padding: "8px 16px",
+    borderRadius: 12,
+    background: "rgba(0, 0, 0, 0.35)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+    zIndex: 10,
+    pointerEvents: "none",
+    animation: "hudFadeIn 0.5s ease forwards",
   },
-  toastMessage: {
+  hudDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "#818cf8",
+    opacity: 0.7,
+    flexShrink: 0,
+  },
+  hudText: {
+    fontSize: 13,
+    fontWeight: 500,
+    color: "rgba(255, 255, 255, 0.5)",
+    textTransform: "capitalize",
+  },
+  hudSep: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.2)",
+  },
+
+  // ── Active Task Pill (top center) ─────────────────────────────────────────
+  taskPill: {
+    position: "absolute",
+    top: 70,
+    left: "50%",
+    transform: "translateX(-50%)",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "8px 20px",
+    borderRadius: 14,
+    background: "rgba(79, 70, 229, 0.12)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    border: "1px solid rgba(79, 70, 229, 0.2)",
+    zIndex: 10,
+    pointerEvents: "none",
+    animation: "taskSlideIn 0.3s ease forwards",
+  },
+  taskLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    color: "#818cf8",
+    textTransform: "uppercase",
+    flexShrink: 0,
+  },
+  taskText: {
     fontSize: 14,
-    lineHeight: 1.5,
-    color: "#d1d5db",
+    fontWeight: 500,
+    color: "rgba(255, 255, 255, 0.7)",
+    maxWidth: 400,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+
+  // ── Face Recognition Card ─────────────────────────────────────────────────
+  faceCard: {
+    width: 300,
+    padding: "18px 20px",
+    borderRadius: 22,
+    background: "rgba(255, 255, 255, 0.05)",
+    backdropFilter: "blur(50px) saturate(200%)",
+    WebkitBackdropFilter: "blur(50px) saturate(200%)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    boxShadow:
+      "0 16px 48px rgba(0, 0, 0, 0.5), " +
+      "0 0 0 0.5px rgba(255, 255, 255, 0.04) inset, " +
+      "0 1px 0 rgba(255, 255, 255, 0.06) inset",
+    animation:
+      "visionCardIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, " +
+      "visionCardOut 0.4s ease 5.8s forwards",
+  },
+  faceCardHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+  faceCardAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: "50%",
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    boxShadow: "0 2px 12px rgba(102, 126, 234, 0.25)",
+  },
+  faceCardInitials: {
+    fontSize: 18,
+    fontWeight: 700,
+    color: "#fff",
+  },
+  faceCardName: {
+    fontSize: 17,
+    fontWeight: 600,
+    color: "#fff",
+    letterSpacing: "-0.01em",
+  },
+  faceCardRelationship: {
+    fontSize: 13,
+    fontWeight: 500,
+    color: "rgba(255, 255, 255, 0.4)",
+    textTransform: "capitalize",
+    marginTop: 2,
+  },
+  faceCardWhisper: {
+    fontSize: 14,
+    lineHeight: 1.55,
+    color: "rgba(255, 255, 255, 0.5)",
+    fontStyle: "italic",
+    margin: "14px 0 0",
+    paddingTop: 14,
+    borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+  },
+
+  // ── Wandering Alert (center, amber) ───────────────────────────────────────
+  wanderingOverlay: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 30,
+    pointerEvents: "none",
+  },
+  wanderingCard: {
+    maxWidth: 440,
+    padding: "28px 36px",
+    borderRadius: 26,
+    background: "rgba(120, 53, 15, 0.15)",
+    backdropFilter: "blur(50px) saturate(180%)",
+    WebkitBackdropFilter: "blur(50px) saturate(180%)",
+    border: "1px solid rgba(245, 158, 11, 0.2)",
+    textAlign: "center",
+    animation:
+      "wanderingIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, " +
+      "wanderingOut 0.5s ease 11s forwards, " +
+      "amberPulse 3s ease-in-out infinite",
+  },
+  wanderingIconRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 18,
+  },
+  wanderingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    background: "#f59e0b",
+    boxShadow: "0 0 12px rgba(245, 158, 11, 0.5)",
+  },
+  wanderingLabel: {
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    color: "#fbbf24",
+    textTransform: "uppercase",
+  },
+  wanderingMessage: {
+    fontSize: 22,
+    fontWeight: 500,
+    lineHeight: 1.4,
+    color: "rgba(255, 255, 255, 0.85)",
     margin: 0,
   },
-  // AI indicator
+  wanderingScene: {
+    fontSize: 13,
+    color: "rgba(245, 158, 11, 0.5)",
+    marginTop: 14,
+    textTransform: "capitalize",
+  },
+
+  // ── Grounding Banner (full-width, very bottom) ────────────────────────────
+  groundingBanner: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: "22px 32px",
+    background: "rgba(0, 0, 0, 0.45)",
+    backdropFilter: "blur(40px) saturate(150%)",
+    WebkitBackdropFilter: "blur(40px) saturate(150%)",
+    borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+    zIndex: 15,
+    pointerEvents: "none",
+    animation:
+      "groundingIn 0.5s ease forwards, " +
+      "groundingOut 0.5s ease 9s forwards",
+  },
+  groundingMessage: {
+    fontSize: 18,
+    fontWeight: 400,
+    lineHeight: 1.5,
+    color: "rgba(255, 255, 255, 0.8)",
+    textAlign: "center",
+    margin: 0,
+    maxWidth: 700,
+    marginLeft: "auto",
+    marginRight: "auto",
+  },
+
+  // ── Bottom card stack (above grounding) ───────────────────────────────────
+  bottomStack: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 12,
+    zIndex: 15,
+    pointerEvents: "none",
+    transition: "bottom 0.4s ease",
+  },
+
+  // ── Activity Reminder Card ────────────────────────────────────────────────
+  activityCard: {
+    maxWidth: 480,
+    width: "90%",
+    padding: "16px 22px",
+    borderRadius: 18,
+    background: "rgba(255, 255, 255, 0.05)",
+    backdropFilter: "blur(40px) saturate(180%)",
+    WebkitBackdropFilter: "blur(40px) saturate(180%)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    boxShadow: "0 12px 40px rgba(0, 0, 0, 0.4)",
+    animation:
+      "overlayIn 0.4s ease forwards, " +
+      "overlayOut 0.4s ease 7s forwards",
+  },
+  activityHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  activityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "#22d3ee",
+    boxShadow: "0 0 8px rgba(34, 211, 238, 0.4)",
+    flexShrink: 0,
+  },
+  activityLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    color: "#22d3ee",
+    textTransform: "uppercase",
+  },
+  activityMessage: {
+    fontSize: 16,
+    fontWeight: 400,
+    lineHeight: 1.5,
+    color: "rgba(255, 255, 255, 0.75)",
+    margin: 0,
+  },
+
+  // ── Conversation Whisper (subtitle-style) ─────────────────────────────────
+  whisperCard: {
+    maxWidth: 520,
+    width: "90%",
+    padding: "12px 22px",
+    borderRadius: 14,
+    background: "rgba(255, 255, 255, 0.03)",
+    backdropFilter: "blur(30px)",
+    WebkitBackdropFilter: "blur(30px)",
+    border: "1px solid rgba(255, 255, 255, 0.05)",
+    animation:
+      "overlayIn 0.3s ease forwards, " +
+      "overlayOut 0.4s ease 6s forwards",
+  },
+  whisperText: {
+    fontSize: 15,
+    fontWeight: 400,
+    fontStyle: "italic",
+    lineHeight: 1.5,
+    color: "rgba(255, 255, 255, 0.6)",
+    textAlign: "center",
+    margin: 0,
+  },
+  whisperSubject: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: "rgba(255, 255, 255, 0.25)",
+    textAlign: "center",
+    marginTop: 6,
+  },
+
+  // ── AI indicator ──────────────────────────────────────────────────────────
   aiIndicator: {
     position: "absolute",
     bottom: 24,

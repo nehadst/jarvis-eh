@@ -146,7 +146,6 @@ class Orchestrator:
                 frame = self._latest_frame
         if frame is None:
             return None
-        frame = self.face_recognizer.draw_overlay(frame)
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return buf.tobytes()
 
