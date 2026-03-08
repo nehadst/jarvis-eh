@@ -2,24 +2,30 @@
 REWIND — FastAPI backend entry point.
 
 Endpoints:
-  GET  /health                     — liveness check
-  GET  /api/family                 — list all family profiles
-  GET  /api/family/{id}            — get one profile
-  POST /api/family/{id}            — create / update a profile
-  POST /api/tasks                  — caregiver adds a task for the patient
-  GET  /api/tasks                  — get current active task
-  POST /api/household              — set who is currently home
-  GET  /api/household              — get current household context
-  POST /api/grounding/trigger      — manually trigger a grounding message
-  GET  /api/tasks                  — get the current active task
-  GET  /api/events                 — recent event log
-  POST /api/capture/start          — start the live frame-capture loop
-  POST /api/capture/stop           — stop the loop
-  GET  /api/stream                 — live MJPEG view of the glasses feed
-  POST /api/montage/{person_id}    — on-demand memory montage (optional ?tag=christmas)
-  GET  /api/safezones              — get current safe zone list
-  POST /api/safezones              — update safe zone list
-  WS   /ws                         — real-time event stream to the dashboard
+  GET  /health                          — liveness check
+  GET  /api/family                      — list all family profiles
+  GET  /api/family/{id}                 — get one profile
+  POST /api/family/{id}                 — create / update a profile
+  POST /api/family/{id}/photos          — upload face photos
+  DELETE /api/family/{id}               — remove a family member
+  POST /api/tasks                       — caregiver adds a task for the patient
+  GET  /api/tasks                       — get current active task
+  DELETE /api/tasks                     — clear current task
+  POST /api/household                   — set who is currently home
+  GET  /api/household                   — get current household context
+  POST /api/grounding/trigger           — manually trigger a grounding message
+  GET  /api/events                      — recent event log
+  POST /api/capture/start               — start the live frame-capture loop
+  POST /api/capture/stop                — stop the loop
+  GET  /api/stream                      — live MJPEG view of the glasses feed
+  POST /api/montage/{person_id}         — on-demand memory montage (optional ?tag=christmas)
+  GET  /api/safezones                   — get current safe zone list
+  POST /api/safezones                   — update safe zone list
+  POST /api/encounter/{person_id}/record — manually trigger an encounter recording
+  GET  /api/encounters/{person_id}      — list encounter clips + snapshots for a person
+  GET  /api/encounters                  — list recent encounters across all people
+  GET  /api/encounter/status            — check if recording in progress
+  WS   /ws                              — real-time event stream to the dashboard
 """
 
 from __future__ import annotations
@@ -39,7 +45,6 @@ from config import settings, FACE_DB_PATH, FAMILY_PROFILES_PATH
 from pipeline.orchestrator import Orchestrator
 from services.backboard_client import memory
 from features.wandering_guardian.guardian import DEFAULT_SAFE_ZONES
-from features.memory_montage.builder import MontageBuilder
 
 
 # ─── WebSocket connection manager ────────────────────────────────────────────
@@ -69,7 +74,6 @@ manager = ConnectionManager()
 # ─── Global state ─────────────────────────────────────────────────────────────
 
 orchestrator: Orchestrator | None = None
-montage_builder: MontageBuilder | None = None
 capture_thread: threading.Thread | None = None
 event_log: list[dict] = []  # keep the last 100 events in memory
 _main_loop: asyncio.AbstractEventLoop | None = None  # stored at startup
@@ -90,10 +94,9 @@ def _on_event(event: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global orchestrator, montage_builder, _main_loop
+    global orchestrator, _main_loop
     _main_loop = asyncio.get_running_loop()
     orchestrator = Orchestrator(event_callback=_on_event)
-    montage_builder = MontageBuilder(on_event=_on_event)
     yield
     if orchestrator:
         orchestrator.stop()
@@ -279,40 +282,100 @@ async def stop_capture():
     return {"ok": False}
 
 
-@app.post("/api/montage/{person_id}")
-async def trigger_montage(
-    person_id: str,
-    tag: str | None = Query(default=None, description="Optional tag filter, e.g. 'christmas'"),
-):
-    """
-    Caregiver on-demand montage trigger.
-    Runs the full pipeline (Gemini narration → ElevenLabs → Cloudinary) in a
-    background thread and broadcasts a montage_ready event to all WS clients.
+# ─── Encounter Recording ─────────────────────────────────────────────────
 
-    Query params:
-      ?tag=christmas  — narrows photo selection to photos also tagged 'christmas'
-    """
+@app.post("/api/encounter/{person_id}/record")
+async def trigger_encounter_recording(person_id: str):
+    """Manually trigger an encounter recording for a family member."""
     path = FAMILY_PROFILES_PATH / f"{person_id}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Person not found")
 
-    if not montage_builder:
-        raise HTTPException(status_code=503, detail="Montage service not initialised")
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+
+    profile = json.loads(path.read_text())
+    name = profile.get("name", person_id)
+    relationship = profile.get("relationship", "person")
+
+    started = orchestrator.encounter_recorder.start_recording(person_id, name, relationship)
+    if not started:
+        return {"ok": False, "message": "Recording already in progress"}
+
+    return {
+        "ok": True,
+        "message": f"Recording started for {name}",
+        "person_id": person_id,
+    }
+
+
+@app.get("/api/encounters/{person_id}")
+async def get_encounters(person_id: str):
+    """List encounter clips + snapshots for a person."""
+    clips = memory.retrieve(f"encounter_clips_{person_id}")
+    if not clips:
+        clips = []
+    if not isinstance(clips, list):
+        clips = [clips]
+    return {"person_id": person_id, "encounters": clips}
+
+
+@app.get("/api/encounters")
+async def get_all_encounters():
+    """List recent encounters across all family members."""
+    encounters = []
+    for f in FAMILY_PROFILES_PATH.glob("*.json"):
+        try:
+            profile = json.loads(f.read_text())
+            person_id = profile.get("id", f.stem)
+            clips = memory.retrieve(f"encounter_clips_{person_id}")
+            if isinstance(clips, list):
+                for clip in clips:
+                    clip["person_id"] = person_id
+                    clip["person"] = profile.get("name", person_id)
+                    encounters.append(clip)
+        except Exception:
+            pass
+    # Sort by timestamp descending
+    encounters.sort(key=lambda e: e.get("timestamp", 0), reverse=True)
+    return {"encounters": encounters[:50]}
+
+
+@app.get("/api/encounter/status")
+async def get_encounter_status():
+    """Check if an encounter recording is currently in progress."""
+    if not orchestrator:
+        return {"recording": False}
+    return {"recording": orchestrator.encounter_recorder.is_recording}
+
+
+# ─── Memory Montage ──────────────────────────────────────────────────────
+
+@app.post("/api/montage/{person_id}")
+async def trigger_montage(person_id: str, tag: str = Query(None)):
+    """On-demand memory montage for a family member. Optional ?tag=christmas."""
+    path = FAMILY_PROFILES_PATH / f"{person_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    try:
+        from features.memory_montage.builder import MontageBuilder
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Montage service not available")
+
+    builder = MontageBuilder()
 
     # Run in a background thread so the HTTP response returns immediately
     def _run():
-        montage_builder.build(person_id, tag_filter=tag, force=True)
+        result = builder.build(person_id, tag_filter=tag, force=True)
+        if result:
+            _on_event(result)
 
     threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "message": f"Montage building for {person_id}"}
 
-    profile = json.loads(path.read_text())
-    return {
-        "ok": True,
-        "message": f"Montage building for {profile.get('name')} — watch the dashboard",
-        "person_id": person_id,
-        "tag_filter": tag,
-    }
 
+# ─── Safe Zones ──────────────────────────────────────────────────────────
 
 @app.get("/api/safezones")
 async def get_safezones():

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { addTask, fetchFamily, triggerMontage, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
+import { addTask, fetchFamily, triggerEncounterRecording, setHousehold, getHousehold, triggerGrounding, getSafezones, setSafezones } from "../api/client.js";
 
 const C1 = "oklch(0.81 0.117 11.638)";
 const C2 = "oklch(0.645 0.246 16.439)";
@@ -25,9 +25,8 @@ export default function TaskPanel() {
 
   const [family, setFamily] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState("");
-  const [tag, setTag] = useState("");
-  const [montaging, setMontaging] = useState(false);
-  const [montageSent, setMontageSent] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingSent, setRecordingSent] = useState(false);
 
   const [customZones, setCustomZones] = useState([]);
   const [defaultZones, setDefaultZones] = useState([]);
@@ -77,15 +76,15 @@ export default function TaskPanel() {
     setTimeout(() => setSent(false), 3000);
   };
 
-  const handleMontage = async () => {
+  const handleRecordEncounter = async () => {
     if (!selectedPerson) return;
-    setMontaging(true);
+    setRecording(true);
     try {
-      await triggerMontage(selectedPerson, tag.trim() || undefined);
-      setMontageSent(true);
-      setTimeout(() => setMontageSent(false), 4000);
+      await triggerEncounterRecording(selectedPerson);
+      setRecordingSent(true);
+      setTimeout(() => setRecordingSent(false), 4000);
     } finally {
-      setMontaging(false);
+      setRecording(false);
     }
   };
 
@@ -235,11 +234,11 @@ export default function TaskPanel() {
 
       <div className="border-t border-border" />
 
-      {/* Memory Montage */}
+      {/* Record Encounter */}
       <section className="flex flex-col gap-2">
-        <SectionLabel>Memory Montage</SectionLabel>
+        <SectionLabel>Record Encounter</SectionLabel>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Generate a Ken Burns-style slideshow with AI narration.
+          Capture a 10-second clip + 3 snapshot photos of a real encounter with a family member.
         </p>
         {family.length === 0 ? (
           <p className="text-[11px] text-muted-foreground">No family profiles found.</p>
@@ -257,27 +256,19 @@ export default function TaskPanel() {
                 </option>
               ))}
             </select>
-            <input
-              className={inputCls}
-              style={inputStyle}
-              type="text"
-              placeholder="Optional tag (e.g. christmas)"
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-            />
             <button
               className={btnCls}
               style={{
-                background: `color-mix(in oklch, ${C5} 15%, transparent)`,
-                color: C5,
-                border: `1px solid color-mix(in oklch, ${C5} 30%, transparent)`,
+                background: `color-mix(in oklch, ${C4} 15%, transparent)`,
+                color: C4,
+                border: `1px solid color-mix(in oklch, ${C4} 30%, transparent)`,
               }}
-              onClick={handleMontage}
-              disabled={montaging}
+              onClick={handleRecordEncounter}
+              disabled={recording}
             >
-              {montaging ? "Building…" : "Generate Montage"}
+              {recording ? "Starting…" : "Record Encounter"}
             </button>
-            {montageSent && <p className="text-[12px]" style={{ color: C5 }}>Building — watch the event feed.</p>}
+            {recordingSent && <p className="text-[12px]" style={{ color: C4 }}>Recording — watch the event feed.</p>}
           </>
         )}
       </section>
@@ -293,9 +284,8 @@ export default function TaskPanel() {
             [C1, "Situation grounding"],
             [C3, "Activity reminder"],
             [CD, "Wandering alert"],
-            [CD, "Wandering escalated"],
-            [C4, "Conversation assist"],
-            [C5, "Montage ready"],
+            [C4, "Conversation / Voice command"],
+            [C5, "Clip / Montage ready"],
             [C1, "Check-in"],
             [C3, "Task reminder"],
             [C2, "Task complete"],

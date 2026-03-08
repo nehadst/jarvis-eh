@@ -10,42 +10,22 @@ import { LightRays } from "./ui/light-rays.jsx";
 const C2 = "oklch(0.645 0.246 16.439)";
 
 export default function Dashboard({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
-  // ID (timestamp) of the event the user explicitly clicked "Play" on
-  const [pinnedId, setPinnedId] = useState(null);
-  // Set of timestamps the user has dismissed — prevents auto-pop from reopening them
-  const [dismissedIds, setDismissedIds] = useState(() => new Set());
+  const [clipEvent, setClipEvent] = useState(null);
+  const [clipDismissed, setClipDismissed] = useState(false);
   const [tab, setTab] = useState("live"); // "live" | "family"
 
-  // Use a plain loop instead of Array.findLast (not available in older browsers)
-  const latestMontage = (() => {
-    for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].type === "montage_ready") return events[i];
-    }
-    return null;
-  })();
+  // Show the player when an encounter_clip_ready or montage_ready event arrives
+  const latestClip = events.findLast?.((e) => e.type === "encounter_clip_ready" || e.type === "montage_ready") ?? null;
+  const activeClip = clipDismissed ? null : (clipEvent ?? latestClip);
 
-  // Pinned event takes priority; otherwise auto-show latest unless dismissed
-  const activeMontage = (() => {
-    if (pinnedId) {
-      return events.find((e) => e.type === "montage_ready" && e.timestamp === pinnedId) ?? null;
-    }
-    if (latestMontage && !dismissedIds.has(latestMontage.timestamp)) {
-      return latestMontage;
-    }
-    return null;
-  })();
-
-  const handlePlayMontage = (event) => {
-    // Un-dismiss this event in case the user previously closed it
-    setDismissedIds((prev) => { const next = new Set(prev); next.delete(event.timestamp); return next; });
-    setPinnedId(event.timestamp);
+  const handlePlayMedia = (e) => {
+    setClipEvent(e);
+    setClipDismissed(false);
   };
 
   const handleClose = () => {
-    if (activeMontage) {
-      setDismissedIds((prev) => new Set([...prev, activeMontage.timestamp]));
-    }
-    setPinnedId(null);
+    setClipEvent(null);
+    setClipDismissed(true);
   };
 
   return (
@@ -163,15 +143,14 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
         )}
 
         <div className="flex flex-col overflow-hidden border-l border-border">
-          <EventFeed events={events} onPlayMontage={handlePlayMontage} />
+          <EventFeed events={events} onPlayClip={handlePlayMedia} />
           <div className="flex-shrink-0 overflow-y-auto border-t border-border" style={{ maxHeight: "45%" }}>
             <TaskPanel />
           </div>
         </div>
       </div>
 
-      <MontagePlayer event={activeMontage} onClose={handleClose} />
-
+      <MontagePlayer event={activeClip} onClose={handleClose} />
     </div>
   );
 }

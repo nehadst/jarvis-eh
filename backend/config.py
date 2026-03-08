@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     face_similarity_threshold: float = 0.4  # cosine similarity — higher = stricter (0.3-0.6 range)
     face_cooldown_seconds: int = 30
 
+    # Encounter recording
+    encounter_record_fps: int = 10
+    encounter_record_duration: float = 10.0
+    encounter_pre_buffer_seconds: float = 3.0
+    encounter_snapshot_count: int = 3
+
+    # Conversation sessions
+    conversation_departure_grace: float = 15.0   # seconds before person considered gone
+    conversation_min_duration: float = 30.0      # minimum session length to generate summary
+    conversation_max_duration: float = 1800.0    # 30 min safety cap
+
     # App
     debug: bool = True
     port: int = 8000

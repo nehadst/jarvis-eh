@@ -13,6 +13,9 @@ const TYPE_CONFIG = {
   wandering_detected: { label: "Wandering Alert",     color: CD, icon: "⚠️" },
   wandering_escalated:{ label: "Wandering — Urgent",  color: CD, icon: "🚨" },
   conversation_assist:{ label: "Conversation Assist", color: C4, icon: "💬" },
+  voice_command_response: { label: "Voice Command",   color: C4, icon: "🎤" },
+  encounter_recording_started: { label: "Recording",  color: CD, icon: "🔴" },
+  encounter_clip_ready: { label: "Clip Ready",        color: C5, icon: "🎥" },
   montage_ready:      { label: "Montage Ready",       color: C5, icon: "🎬" },
   confusion_checkin:  { label: "Check-In",            color: C1, icon: "💭" },
   task_reminder:      { label: "Task Reminder",       color: C3, icon: "📋" },
@@ -24,9 +27,9 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function EventCard({ event, onPlayMontage }) {
+function EventCard({ event, onPlayClip }) {
   const cfg = TYPE_CONFIG[event.type] || { label: event.type, color: "var(--muted-foreground)", icon: "•" };
-  const message = event.whisper || event.message || "";
+  const message = event.whisper || event.message || event.response || "";
   const isUrgent = event.type === "wandering_escalated";
 
   return (
@@ -79,6 +82,52 @@ function EventCard({ event, onPlayMontage }) {
         </p>
       )}
 
+      {/* Last encounter snapshots (shown on face_recognized and voice_command_response) */}
+      {(event.type === "face_recognized" || event.type === "voice_command_response") && event.last_snapshots?.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <span className="text-[11px] text-muted-foreground">Last encounter:</span>
+          <div className="flex gap-1.5 mt-1">
+            {event.last_snapshots.map((url, i) => (
+              <img
+                key={i}
+                src={url}
+                alt={`Last encounter ${i + 1}`}
+                style={{ width: 80, height: 60, objectFit: "cover", border: "1px solid var(--border)" }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Play clip button (encounter clips) */}
+      {event.type === "encounter_clip_ready" && event.clip_url && (
+        <>
+          <button
+            className="mt-2 px-3 py-1 text-[11px] font-semibold cursor-pointer transition-opacity hover:opacity-80"
+            style={{
+              background: `color-mix(in oklch, ${C5} 15%, transparent)`,
+              color: C5,
+              border: `1px solid color-mix(in oklch, ${C5} 30%, transparent)`,
+            }}
+            onClick={() => onPlayClip?.(event)}
+          >
+            ▶ Play Clip
+          </button>
+          {event.snapshots?.length > 0 && (
+            <div className="flex gap-1.5 mt-2">
+              {event.snapshots.map((url, i) => (
+                <img
+                  key={i}
+                  src={url}
+                  alt={`Snapshot ${i + 1}`}
+                  style={{ width: 80, height: 60, objectFit: "cover", border: "1px solid var(--border)" }}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
       {/* Play montage button */}
       {event.type === "montage_ready" && event.montage_url && (
         <button
@@ -88,7 +137,7 @@ function EventCard({ event, onPlayMontage }) {
             color: C5,
             border: `1px solid color-mix(in oklch, ${C5} 30%, transparent)`,
           }}
-          onClick={() => onPlayMontage?.(event)}
+          onClick={() => onPlayClip?.(event)}
         >
           ▶ Play Montage
         </button>
@@ -97,7 +146,7 @@ function EventCard({ event, onPlayMontage }) {
   );
 }
 
-export default function EventFeed({ events, onPlayMontage }) {
+export default function EventFeed({ events, onPlayClip }) {
   if (!events.length) {
     return (
       <div className="flex items-center justify-center h-full text-foreground text-[14px]">
@@ -109,7 +158,7 @@ export default function EventFeed({ events, onPlayMontage }) {
   return (
     <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-2.5">
       {events.map((e, i) => (
-        <EventCard key={i} event={e} onPlayMontage={onPlayMontage} />
+        <EventCard key={i} event={e} onPlayClip={onPlayClip} />
       ))}
     </div>
   );

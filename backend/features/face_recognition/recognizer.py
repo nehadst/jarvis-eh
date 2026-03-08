@@ -44,13 +44,15 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
 class FaceRecognizer:
-    def __init__(self, on_event: Callable[[dict], None] | None = None) -> None:
+    def __init__(
+        self,
+        on_event: Callable[[dict], None] | None = None,
+        on_encounter: Callable[[str, str, str], None] | None = None,
+    ) -> None:
         self.on_event = on_event or (lambda e: None)
+        self.on_encounter = on_encounter
         self._last_identified: dict[str, float] = {}
         self._profiles: dict[str, dict] = self._load_profiles()
-
-        # Montage builder (lazy init to avoid circular imports)
-        self._montage_builder = None
 
         # Overlay state — drawn on the live stream by the orchestrator
         self._overlay_lock = threading.Lock()
@@ -298,12 +300,9 @@ class FaceRecognizer:
             "frame_size": {"w": frame_shape[1], "h": frame_shape[0]},
         })
 
-        # Trigger memory montage in background
-        threading.Thread(
-            target=self._trigger_montage,
-            args=(person_id,),
-            daemon=True,
-        ).start()
+        # Trigger encounter recording
+        if self.on_encounter:
+            self.on_encounter(person_id, name, relationship)
 
     # ── Memory helpers ────────────────────────────────────────────────────────
 
@@ -341,25 +340,6 @@ class FaceRecognizer:
             path.write_text(json.dumps(profile, indent=2))
         except Exception as e:
             print(f"[FaceRecognizer] Could not update profile {person_id}: {e}")
-
-    # ── Montage ───────────────────────────────────────────────────────────────
-
-    def _trigger_montage(self, person_id: str) -> None:
-        try:
-            builder = self._get_montage_builder()
-            if builder:
-                builder.build(person_id, force=False)
-        except Exception as e:
-            print(f"[FaceRecognizer] Montage build error for '{person_id}': {e}")
-
-    def _get_montage_builder(self):
-        if self._montage_builder is None:
-            try:
-                from features.memory_montage.builder import MontageBuilder
-                self._montage_builder = MontageBuilder(on_event=self.on_event)
-            except Exception as e:
-                print(f"[FaceRecognizer] Could not initialise MontageBuilder: {e}")
-        return self._montage_builder
 
     # ── Profile loading ───────────────────────────────────────────────────────
 
