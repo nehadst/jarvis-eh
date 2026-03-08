@@ -99,6 +99,11 @@ class Orchestrator:
         self.grounder.set_active_task(task, set_by)
         self.tracker.set_active_task(task)
 
+    def clear_active_task(self) -> None:
+        """Remove the current task (caregiver marks it done or cancels it)."""
+        self.active_task = None
+        self.grounder.clear_active_task()
+
     def trigger_manual_grounding(self) -> None:
         """Grab a fresh frame and force a grounding message immediately."""
         if self._capture is None:
@@ -188,7 +193,6 @@ class Orchestrator:
                 frame = self._latest_frame
         if frame is None:
             return None
-        frame = self.face_recognizer.draw_overlay(frame)
         _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return buf.tobytes()
 

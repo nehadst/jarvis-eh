@@ -1,6 +1,6 @@
 {
   "last_activity": {
-    "time": 1772927684.383934,
+    "time": 1772928644.8579562,
     "activity": "unknown",
     "location_hint": ""
   },
@@ -24,6 +24,11 @@
       "timestamp": 1772922080.717482,
       "event": "face_recognized",
       "whisper": "\"That's Ronaldo, your father. Remember, he loves telling stories about your childhood adventures. You just saw him 18 minutes ago.\""
+    },
+    {
+      "timestamp": 1772928585.5120268,
+      "event": "face_recognized",
+      "whisper": "That's Ronaldo, your father, Dad. Remember how he taught you to fish when you were a kid?"
     }
   ],
   "continuity_reminders": [
@@ -81,6 +86,33 @@
       "timestamp": 1772922058.996114,
       "activity": "coding on computer",
       "message": "\"Hi Dad, you were coding on your computer; your keyboard is right under your hands if you'd like to continue.\""
+    },
+    {
+      "timestamp": 1772928621.7543948,
+      "activity": "unknown",
+      "message": "Hi Dad, you were reading your book. It's on the table by your chair when you're ready to continue."
+    }
+  ],
+  "interactions_sarah": [
+    {
+      "timestamp": 1772928347.137134,
+      "event": "face_recognized",
+      "whisper": "That's Sarah, your granddaughter. She loves baking cookies with you."
+    },
+    {
+      "timestamp": 1772928360.878298,
+      "event": "face_recognized",
+      "whisper": "That's Sarah, your granddaughter. She loves baking cookies with you."
+    }
+  ],
+  "household_context": {
+    "who_is_home": "Sarah, David"
+  },
+  "wandering_events": [
+    {
+      "timestamp": 1772928597.044925,
+      "scene": "room interior",
+      "message": "Hey Dad, let's head back inside for some tea and a chat."
     }
   ],
   "household_context": {

@@ -136,7 +136,12 @@ class FaceRecognizer:
             self._last_bbox = (int(bbox[0]), int(bbox[1]),
                                int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1]))
 
-            self._handle_recognition(best_person_id, profile, best_score)
+            frame_shape = frame.shape[:2]  # (h, w)
+            threading.Thread(
+                target=self._handle_recognition,
+                args=(best_person_id, profile, best_score, frame_shape),
+                daemon=True,
+            ).start()
             break  # handle one face per frame to avoid spamming
 
     def rebuild_embeddings(self) -> None:
@@ -229,7 +234,7 @@ class FaceRecognizer:
 
     # ── Recognition handler ───────────────────────────────────────────────────
 
-    def _handle_recognition(self, person_id: str, profile: dict, similarity: float) -> None:
+    def _handle_recognition(self, person_id: str, profile: dict, similarity: float, frame_shape: tuple = (480, 640)) -> None:
         """Generate whisper, play TTS, set overlay, fire event."""
         name = profile.get("name", person_id)
         relationship = profile.get("relationship", "person")
@@ -289,6 +294,8 @@ class FaceRecognizer:
             "relationship": relationship,
             "confidence": confidence,
             "whisper": whisper_text,
+            "bbox": {"x": bbox[0], "y": bbox[1], "w": bbox[2], "h": bbox[3]},
+            "frame_size": {"w": frame_shape[1], "h": frame_shape[0]},
         })
 
         # Trigger memory montage in background
