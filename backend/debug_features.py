@@ -62,6 +62,12 @@ def main():
         if frame_count % 10 == 0:
             grounder.process(frame)
         tracker.process(frame)
+        
+        # Show tracker confusion state for debugging
+        if frame_count % 5 == 0:
+            confusion_detected = tracker._detect_confusion(frame)
+            print(f"  Frame {frame_count}: confusion={confusion_detected}, count={tracker._confusion_count}")
+        
         if frame_count % 10 == 0:
             guardian.process(frame)
 

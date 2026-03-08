@@ -1,8 +1,8 @@
 {
   "last_activity": {
-    "time": 1772930005.7641122,
-    "activity": "unknown",
-    "location_hint": ""
+    "time": 1772930977.6951945,
+    "activity": "writing",
+    "location_hint": "papers on the desk"
   },
   "continuity_reminders": [
     {
@@ -19,6 +19,16 @@
       "timestamp": 45.0,
       "activity": "watching tv",
       "message": "That's what you were doing. Let's get back to it."
+    },
+    {
+      "timestamp": 1772930783.218814,
+      "activity": "writing",
+      "message": "Nehad, you were writing. Your pen is right here."
+    },
+    {
+      "timestamp": 1772930980.4075446,
+      "activity": "writing",
+      "message": "Nehad, you were writing. Your pen is right here."
     }
   ],
   "active_patient_task": {
@@ -30,6 +40,16 @@
       "timestamp": 1772924878.7216175,
       "scene": "hotel front desk",
       "message": "Nehad, honey, let's go back to the house, I've got your favorite tea waiting."
+    },
+    {
+      "timestamp": 1772930167.945757,
+      "scene": "hotel reception desk",
+      "message": "Nehad, let's get you home to your cozy chair."
+    },
+    {
+      "timestamp": 1772930331.4065082,
+      "scene": "hotel reception area",
+      "message": "Nehad, let's go back to your cozy home now."
     }
   ]
 }

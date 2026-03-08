@@ -40,6 +40,14 @@ REMINDER_COOLDOWN = 45
 # How long the activity buffer spans (seconds)
 BUFFER_DURATION = 90
 
+# Fraction of frame pixels that must change to count as "motion".
+# Below this fraction → person is still (confused). Real-world video noise
+# alone accounts for ~0.1–0.5%; genuine motion is typically >2%.
+MOTION_THRESHOLD = 0.02  # 2% of frame pixels
+
+# How many consecutive still frames before we consider the person confused
+CONFUSION_FRAMES = 3
+
 
 class ActivityTracker:
     def __init__(self, on_event: Callable[[dict], None] | None = None) -> None:
@@ -79,7 +87,7 @@ class ActivityTracker:
         # Detect confusion via stillness
         if self._detect_confusion(frame):
             self._confusion_count += 1
-            if self._confusion_count >= 3 and (now - self._last_reminder_time) >= REMINDER_COOLDOWN:
+            if self._confusion_count >= CONFUSION_FRAMES and (now - self._last_reminder_time) >= REMINDER_COOLDOWN:
                 self._confusion_count = 0
                 self._deliver_reminder()
         else:
@@ -124,6 +132,9 @@ class ActivityTracker:
         """
         Simple frame-diff motion heuristic.
         Extended still period → person is confused / lost.
+
+        Uses a fraction of total frame pixels so the threshold scales
+        correctly for any resolution (SD, HD, etc.).
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (21, 21), 0)
@@ -133,7 +144,9 @@ class ActivityTracker:
         diff = cv2.absdiff(self._prev_frame, gray)
         self._prev_frame = gray
         _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
-        return int(np.sum(thresh)) < 2000  # very still
+        total_pixels = gray.shape[0] * gray.shape[1]
+        changed_fraction = np.sum(thresh) / (255.0 * total_pixels)
+        return changed_fraction < MOTION_THRESHOLD  # True = still / confused
 
     def _deliver_reminder(self) -> None:
         """Find the activity from ~10-30 seconds ago and deliver a reminder."""
