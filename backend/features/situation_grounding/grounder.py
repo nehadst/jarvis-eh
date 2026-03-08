@@ -60,13 +60,16 @@ CHECKIN_THRESHOLD = 3
 CHECKIN_COOLDOWN = 120
 
 # Seconds patient can be off-task before reminder fires
-TASK_DRIFT_LIMIT = 60
+TASK_DRIFT_LIMIT = 10
 
 # Seconds before task reminder can repeat
-TASK_REMINDER_COOLDOWN = 90
+TASK_REMINDER_COOLDOWN = 20
 
 # Consecutive on-task LLM detections (after a reminder) before we consider task complete
 ON_TASK_COMPLETION_FRAMES = 3
+
+# Seconds to wait after a reminder before allowing completion (lets TTS finish playing)
+REMINDER_COMPLETION_GAP = 8
 
 
 class SituationGrounder:
@@ -105,8 +108,13 @@ class SituationGrounder:
         self._active_task_set_by = set_by
         self._last_on_task_time = time.time()  # reset drift clock
         self._last_task_reminder = 0.0          # allow reminder soon after task is set
-        self._prior_activity = None
         self._on_task_streak = 0
+        # Capture what they're doing now so completion message can reference it
+        last = memory.retrieve("last_activity")
+        if isinstance(last, dict) and last.get("activity") and last["activity"] != "unknown":
+            self._prior_activity = last["activity"]
+        else:
+            self._prior_activity = None
         memory.store("active_patient_task", {"task": task, "set_by": set_by})
 
     def clear_active_task(self) -> None:
@@ -125,22 +133,31 @@ class SituationGrounder:
         now = time.time()
 
         # ── Monitor B: Task Engagement ────────────────────────────────────────
-        if self._active_task and self._state == _State.NORMAL:
+        # Always check engagement/completion when a task is active.
+        # Only guard the reminder-firing behind NORMAL state.
+        if self._active_task:
             on_task = self._check_task_engagement(frame)
             if on_task:
                 self._last_on_task_time = now
                 self._on_task_streak += 1
-                # Completion: sustained on-task after a reminder was given
-                if self._on_task_streak >= ON_TASK_COMPLETION_FRAMES and self._last_task_reminder > 0:
-                    self._on_task_completed()
+                # Completion: sustained on-task for enough consecutive frames.
+                # If a reminder was just given, wait for its audio to finish first.
+                if self._on_task_streak >= ON_TASK_COMPLETION_FRAMES:
+                    reminder_clear = (
+                        self._last_task_reminder == 0
+                        or (now - self._last_task_reminder) >= REMINDER_COMPLETION_GAP
+                    )
+                    if reminder_clear:
+                        self._on_task_completed()
             else:
                 self._on_task_streak = 0
-                if now - self._last_on_task_time >= TASK_DRIFT_LIMIT:
-                    if now - self._last_task_reminder >= TASK_REMINDER_COOLDOWN:
-                        self._do_task_reminder()
-                        self._last_task_reminder = now
-                        self._last_on_task_time = now  # reset drift clock
-                        self._state = _State.TASK_REMINDING
+                if self._state == _State.NORMAL:
+                    if now - self._last_on_task_time >= TASK_DRIFT_LIMIT:
+                        if now - self._last_task_reminder >= TASK_REMINDER_COOLDOWN:
+                            self._do_task_reminder()
+                            self._last_task_reminder = now
+                            self._last_on_task_time = now  # reset drift clock
+                            self._state = _State.TASK_REMINDING
 
         # ── Monitor A: Confusion Check-In ─────────────────────────────────────
         if self._state == _State.NORMAL:
@@ -285,12 +302,8 @@ class SituationGrounder:
         setter = self._active_task_set_by
         task = self._active_task
 
-        # Grab what the patient was doing from the activity tracker's memory
-        last = memory.retrieve("last_activity")
-        if isinstance(last, dict) and last.get("activity") and last["activity"] != "unknown":
-            self._prior_activity = last["activity"]
-        else:
-            self._prior_activity = None
+        # _prior_activity is already captured at task-set time — don't overwrite it here
+        # or we risk it reflecting the task activity itself rather than what came before.
 
         msg = self._generate_task_redirect_message(name, setter, task, self._prior_activity)
         if tts:
@@ -348,7 +361,7 @@ class SituationGrounder:
 
         msg = self._generate_completion_message(name, task, prior)
         if tts:
-            tts.speak(msg)
+            tts.speak(msg, blocking=True)  # block so activity reminders can't overlap
         print("[Grounder] Task completion detected.")
         self.on_event({"type": "task_completed", "task": task, "returning_to": prior, "message": msg})
 

@@ -148,6 +148,11 @@ export default function GlassesView({ events, connected, captureRunning, capture
         whisperTimer.current = setTimeout(() => setConversationWhisper(null), 7000);
         break;
       }
+
+      case "task_completed": {
+        setActiveTask(null);
+        break;
+      }
     }
   }, [events]);
 
