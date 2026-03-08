@@ -65,6 +65,9 @@ TASK_DRIFT_LIMIT = 60
 # Seconds before task reminder can repeat
 TASK_REMINDER_COOLDOWN = 90
 
+# Consecutive on-task LLM detections (after a reminder) before we consider task complete
+ON_TASK_COMPLETION_FRAMES = 3
+
 
 class SituationGrounder:
     def __init__(self, on_event: Callable[[dict], None] | None = None) -> None:
@@ -81,6 +84,8 @@ class SituationGrounder:
         # Task drift tracking
         self._last_on_task_time: float = time.time()
         self._last_task_reminder: float = 0.0
+        self._prior_activity: str | None = None   # what patient was doing before task reminder
+        self._on_task_streak: int = 0             # consecutive on-task LLM detections
 
         # Egocentric scan tracking (optical flow)
         self._prev_gray: np.ndarray | None = None
@@ -100,6 +105,8 @@ class SituationGrounder:
         self._active_task_set_by = set_by
         self._last_on_task_time = time.time()  # reset drift clock
         self._last_task_reminder = 0.0          # allow reminder soon after task is set
+        self._prior_activity = None
+        self._on_task_streak = 0
         memory.store("active_patient_task", {"task": task, "set_by": set_by})
 
     def clear_active_task(self) -> None:
@@ -122,12 +129,18 @@ class SituationGrounder:
             on_task = self._check_task_engagement(frame)
             if on_task:
                 self._last_on_task_time = now
-            elif now - self._last_on_task_time >= TASK_DRIFT_LIMIT:
-                if now - self._last_task_reminder >= TASK_REMINDER_COOLDOWN:
-                    self._do_task_reminder()
-                    self._last_task_reminder = now
-                    self._last_on_task_time = now  # reset drift clock
-                    self._state = _State.TASK_REMINDING
+                self._on_task_streak += 1
+                # Completion: sustained on-task after a reminder was given
+                if self._on_task_streak >= ON_TASK_COMPLETION_FRAMES and self._last_task_reminder > 0:
+                    self._on_task_completed()
+            else:
+                self._on_task_streak = 0
+                if now - self._last_on_task_time >= TASK_DRIFT_LIMIT:
+                    if now - self._last_task_reminder >= TASK_REMINDER_COOLDOWN:
+                        self._do_task_reminder()
+                        self._last_task_reminder = now
+                        self._last_on_task_time = now  # reset drift clock
+                        self._state = _State.TASK_REMINDING
 
         # ── Monitor A: Confusion Check-In ─────────────────────────────────────
         if self._state == _State.NORMAL:
@@ -264,15 +277,119 @@ class SituationGrounder:
             return True  # fail safe: don't remind if unsure
 
     def _do_task_reminder(self) -> None:
-        """Play a gentle task reminder that also asks if they need help."""
+        """
+        Play a gentle task reminder that weaves in what the patient was doing.
+        Saves the prior activity so we can redirect them back to it after completion.
+        """
         name = settings.patient_name.split()[0]
         setter = self._active_task_set_by
         task = self._active_task
-        msg = f"Hey {name}, {setter} asked you to {task}. Are you still working on that? Do you need any help?"
+
+        # Grab what the patient was doing from the activity tracker's memory
+        last = memory.retrieve("last_activity")
+        if isinstance(last, dict) and last.get("activity") and last["activity"] != "unknown":
+            self._prior_activity = last["activity"]
+        else:
+            self._prior_activity = None
+
+        msg = self._generate_task_redirect_message(name, setter, task, self._prior_activity)
         if tts:
             tts.speak(msg)
         print("[Grounder] Task reminder played.")
-        self.on_event({"type": "task_reminder", "task": task, "message": msg})
+        self.on_event({"type": "task_reminder", "task": task, "prior_activity": self._prior_activity, "message": msg})
+
+    def _generate_task_redirect_message(
+        self, name: str, setter: str, task: str, prior_activity: str | None
+    ) -> str:
+        """Generate a combined 'you were doing X, but please do Y first' message via Gemini."""
+        if not gemini:
+            if prior_activity:
+                return f"Hey {name}, you were {prior_activity}, but {setter} asked you to {task} first — can you do that, then come back to it?"
+            return f"Hey {name}, {setter} asked you to {task}. Are you still working on that?"
+
+        if prior_activity:
+            prompt = (
+                f"Write a gentle, warm 1-2 sentence message for {name}, a dementia patient.\n\n"
+                f"They were just doing: {prior_activity}\n"
+                f"Their caregiver {setter} has asked them to: {task}\n\n"
+                "The message should:\n"
+                "- Acknowledge what they were just doing\n"
+                "- Gently redirect them to the caregiver task\n"
+                "- Suggest they can return to their prior activity afterward\n"
+                "- Be warm, calm, and under 35 words\n"
+                "- Sound like a caring family member, not a robot\n\n"
+                "Only output the message text."
+            )
+        else:
+            prompt = (
+                f"Write a gentle, warm 1-2 sentence message for {name}, a dementia patient.\n\n"
+                f"Their caregiver {setter} has asked them to: {task}\n\n"
+                "The message should:\n"
+                "- Gently remind them of the task\n"
+                "- Ask if they need any help\n"
+                "- Be warm, calm, and under 25 words\n\n"
+                "Only output the message text."
+            )
+        try:
+            return gemini.generate(prompt)
+        except Exception:
+            if prior_activity:
+                return f"Hey {name}, you were {prior_activity}, but {setter} asked you to {task} first — can you do that, then come back?"
+            return f"Hey {name}, {setter} asked you to {task}. Do you need any help?"
+
+    def _on_task_completed(self) -> None:
+        """
+        Patient has been on-task long enough to consider the task done.
+        Clear it and optionally redirect them back to their prior activity.
+        """
+        name = settings.patient_name.split()[0]
+        task = self._active_task
+        prior = self._prior_activity
+
+        msg = self._generate_completion_message(name, task, prior)
+        if tts:
+            tts.speak(msg)
+        print("[Grounder] Task completion detected.")
+        self.on_event({"type": "task_completed", "task": task, "returning_to": prior, "message": msg})
+
+        # Clear the task state
+        self._active_task = None
+        self._active_task_set_by = "caregiver"
+        self._prior_activity = None
+        self._on_task_streak = 0
+        self._last_task_reminder = 0.0
+        memory.store("active_patient_task", {})
+
+    def _generate_completion_message(self, name: str, task: str, prior_activity: str | None) -> str:
+        """Generate a warm completion acknowledgment with optional redirect back to prior activity."""
+        if not gemini:
+            if prior_activity:
+                return f"Great job, {name}! Now you can get back to {prior_activity}."
+            return f"Great job, {name}!"
+
+        if prior_activity:
+            prompt = (
+                f"Write a warm, encouraging 1-2 sentence message for {name}, a dementia patient.\n\n"
+                f"They just completed: {task}\n"
+                f"Before that, they were doing: {prior_activity}\n\n"
+                "The message should:\n"
+                "- Briefly acknowledge they're done with the task\n"
+                "- Gently remind them they can now return to what they were doing before\n"
+                "- Be warm, encouraging, and under 25 words\n\n"
+                "Only output the message text."
+            )
+        else:
+            prompt = (
+                f"Write a warm, encouraging 1 sentence message for {name}, a dementia patient, "
+                f"who just completed: {task}. Be brief, warm, under 15 words. "
+                "Only output the message text."
+            )
+        try:
+            return gemini.generate(prompt)
+        except Exception:
+            if prior_activity:
+                return f"Great job, {name}! Now you can get back to {prior_activity}."
+            return f"Great job, {name}!"
 
     def _trigger_grounding(self, frame: np.ndarray, force: bool = False) -> None:
         """Build and deliver the grounding message."""
