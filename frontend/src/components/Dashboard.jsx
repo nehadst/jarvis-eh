@@ -6,92 +6,6 @@ import LiveStream from "./LiveStream.jsx";
 import MontagePlayer from "./MontagePlayer.jsx";
 import FamilySetup from "./FamilySetup.jsx";
 
-
-const styles = {
-  root: {
-    minHeight: "100vh",
-    display: "grid",
-    gridTemplateRows: "auto 1fr",
-    background: "#0f0f14",
-    color: "#e8e8f0",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "16px 24px",
-    borderBottom: "1px solid #1e1e2e",
-    background: "#13131a",
-  },
-  title: { fontSize: 22, fontWeight: 700, letterSpacing: "-0.5px" },
-  pill: (connected) => ({
-    padding: "4px 12px",
-    borderRadius: 999,
-    fontSize: 13,
-    fontWeight: 600,
-    background: connected ? "#14532d" : "#450a0a",
-    color: connected ? "#86efac" : "#fca5a5",
-  }),
-  controls: { display: "flex", gap: 10, alignItems: "center" },
-  modeSelect: {
-    padding: "6px 10px",
-    borderRadius: 8,
-    border: "1px solid #2d2d3d",
-    background: "#1a1a24",
-    color: "#e8e8f0",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    outline: "none",
-  },
-  tabBtn: (active) => ({
-    padding: "6px 14px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 13,
-    background: active ? "#4f46e5" : "#1a1a24",
-    color: active ? "#fff" : "#9ca3af",
-    transition: "background 0.15s",
-  }),
-  btn: (active) => ({
-    padding: "8px 18px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 14,
-    background: active ? "#dc2626" : "#16a34a",
-    color: "#fff",
-    transition: "opacity 0.15s",
-  }),
-  body: {
-    display: "grid",
-    gridTemplateColumns: "1fr 340px",
-    gap: 0,
-    height: "calc(100vh - 65px)",
-    overflow: "hidden",
-  },
-  sidebar: {
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    borderLeft: "1px solid #1e1e2e",
-  },
-  glassesLink: {
-    padding: "6px 14px",
-    borderRadius: 8,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#818cf8",
-    textDecoration: "none",
-    background: "rgba(79, 70, 229, 0.12)",
-    border: "1px solid rgba(79, 70, 229, 0.25)",
-    transition: "background 0.15s",
-  },
-};
-
 export default function Dashboard({ events, connected, captureRunning, captureMode, onCaptureMode, onStartCapture, onStopCapture }) {
   const [montageEvent, setMontageEvent] = useState(null);
   const [montageDismissed, setMontageDismissed] = useState(false);
@@ -102,19 +16,67 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
   const activeMontage = montageDismissed ? null : (montageEvent ?? latestMontage);
 
   return (
-    <div style={styles.root}>
-      <header style={styles.header}>
-        <span style={styles.title}>REWIND — Caregiver Dashboard</span>
-        <div style={styles.controls}>
-          <span style={styles.pill(connected)}>
-            {connected ? "● Live" : "○ Disconnected"}
+    <div className="min-h-screen grid bg-background text-foreground" style={{ gridTemplateRows: "auto 1fr" }}>
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-card">
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">Rewind</span>
+          <span className="text-border">·</span>
+          <span className="text-[15px] font-semibold tracking-tight text-foreground">Caregiver Dashboard</span>
+        </div>
+
+        <div className="flex gap-2 items-center">
+          {/* Connection status */}
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+            connected
+              ? "bg-green-950/60 text-green-400 ring-1 ring-green-900"
+              : "bg-red-950/60 text-red-400 ring-1 ring-red-900"
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
+            {connected ? "Live" : "Disconnected"}
           </span>
-          <button style={styles.tabBtn(tab === "live")} onClick={() => setTab("live")}>Live</button>
-          <button style={styles.tabBtn(tab === "family")} onClick={() => setTab("family")}>Family Setup</button>
-          <Link to="/glasses" style={styles.glassesLink}>Glasses View →</Link>
+
+          {/* Tabs */}
+          <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+            <button
+              className={`px-3 py-1.5 rounded-md text-[12px] font-semibold transition-all cursor-pointer border-none ${
+                tab === "live"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+              onClick={() => setTab("live")}
+            >
+              Live
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded-md text-[12px] font-semibold transition-all cursor-pointer border-none ${
+                tab === "family"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+              onClick={() => setTab("family")}
+            >
+              Family Setup
+            </button>
+          </div>
+
+          {/* Glasses view link */}
+          <Link
+            to="/glasses"
+            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors"
+            style={{
+              color: "#a5b4fc",
+              background: "rgba(99,102,241,0.1)",
+              border: "1px solid rgba(99,102,241,0.2)",
+            }}
+          >
+            Glasses View →
+          </Link>
+
+          {/* Mode selector */}
           {!captureRunning && (
             <select
-              style={styles.modeSelect}
+              className="px-2.5 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer outline-none bg-accent border border-border text-foreground"
               value={captureMode}
               onChange={(e) => onCaptureMode(e.target.value)}
             >
@@ -122,27 +84,50 @@ export default function Dashboard({ events, connected, captureRunning, captureMo
               <option value="webcam">Webcam</option>
             </select>
           )}
+
+          {/* Capture toggle */}
           {captureRunning ? (
-            <button style={styles.btn(true)} onClick={onStopCapture}>Stop Capture</button>
+            <button
+              className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white cursor-pointer border-none transition-opacity hover:opacity-90 bg-destructive"
+              onClick={onStopCapture}
+            >
+              Stop Capture
+            </button>
           ) : (
-            <button style={styles.btn(false)} onClick={() => onStartCapture(captureMode)}>Start Capture</button>
+            <button
+              className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white cursor-pointer border-none transition-opacity hover:opacity-90"
+              style={{ background: "oklch(0.45 0.15 145)" }}
+              onClick={() => onStartCapture(captureMode)}
+            >
+              Start Capture
+            </button>
           )}
         </div>
       </header>
 
-      <div style={styles.body}>
+      {/* Body */}
+      <div
+        className="grid overflow-hidden"
+        style={{ gridTemplateColumns: "1fr 340px", height: "calc(100vh - 57px)" }}
+      >
         {tab === "live" ? (
           <LiveStream captureRunning={captureRunning} />
         ) : (
-          <div style={{ overflowY: "auto" }}><FamilySetup /></div>
+          <div className="overflow-y-auto">
+            <FamilySetup />
+          </div>
         )}
-        <div style={styles.sidebar}>
+
+        <div className="flex flex-col overflow-hidden border-l border-border">
           <EventFeed events={events} />
           <TaskPanel />
         </div>
       </div>
 
-      <MontagePlayer event={activeMontage} onClose={() => { setMontageEvent(null); setMontageDismissed(true); }} />
+      <MontagePlayer
+        event={activeMontage}
+        onClose={() => { setMontageEvent(null); setMontageDismissed(true); }}
+      />
     </div>
   );
 }
