@@ -72,11 +72,17 @@ class Orchestrator:
         self._ai_queue: Queue[np.ndarray] = Queue(maxsize=2)
         self._ai_thread: threading.Thread | None = None
 
+        def _on_event(e: dict) -> None:
+            # Keep orchestrator.active_task in sync when grounder auto-completes a task
+            if e.get("type") == "task_completed":
+                self.active_task = None
+            self.event_callback(e)
+
         # Feature modules
-        self.face_recognizer = FaceRecognizer(on_event=self.event_callback)
-        self.grounder = SituationGrounder(on_event=self.event_callback)
-        self.tracker = ActivityTracker(on_event=self.event_callback)
-        self.guardian = WanderingGuardian(on_event=self.event_callback)
+        self.face_recognizer = FaceRecognizer(on_event=_on_event)
+        self.grounder = SituationGrounder(on_event=_on_event)
+        self.tracker = ActivityTracker(on_event=_on_event)
+        self.guardian = WanderingGuardian(on_event=_on_event)
 
         # Capture source — allow explicit override (used by tests/VideoFileCapture)
         if capture is not None:
@@ -184,7 +190,8 @@ class Orchestrator:
             self.tracker.process(frame)
 
             # ── Wandering Guardian (every 10th AI frame) ─────────────────
-            if frame_count % 10 == 0:
+            # Skip while a caregiver task is active — patient may be moving to complete it
+            if frame_count % 10 == 0 and not self.active_task:
                 self.guardian.process(frame)
 
         print("[Orchestrator] AI worker stopped.")
