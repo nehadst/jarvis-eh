@@ -1,58 +1,13 @@
 const TYPE_CONFIG = {
-  face_recognized: { label: "Face Recognized", color: "#818cf8", icon: "👤" },
-  situation_grounding: { label: "Grounding", color: "#34d399", icon: "🏠" },
-  activity_continuity: { label: "Activity Reminder", color: "#fbbf24", icon: "🔄" },
-  wandering_detected: { label: "Wandering Alert", color: "#f87171", icon: "⚠️" },
-  conversation_assist: { label: "Conversation Assist", color: "#a78bfa", icon: "💬" },
-  montage_ready: { label: "Montage Ready", color: "#60a5fa", icon: "🎬" },
-};
-
-const styles = {
-  container: {
-    overflowY: "auto",
-    padding: 20,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  empty: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "100%",
-    color: "#4b5563",
-    fontSize: 15,
-  },
-  card: (color) => ({
-    background: "#1a1a24",
-    border: `1px solid ${color}33`,
-    borderLeft: `3px solid ${color}`,
-    borderRadius: 10,
-    padding: "12px 16px",
-  }),
-  row: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 },
-  badge: (color) => ({
-    fontSize: 12,
-    fontWeight: 700,
-    color,
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-  }),
-  time: { fontSize: 11, color: "#6b7280", marginLeft: "auto" },
-  message: { fontSize: 14, lineHeight: 1.5, color: "#d1d5db" },
-  detail: { fontSize: 12, color: "#6b7280", marginTop: 4 },
-  playBtn: {
-    display: "inline-block",
-    marginTop: 8,
-    padding: "4px 12px",
-    background: "#1d4ed8",
-    color: "#bfdbfe",
-    border: "none",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontSize: 12,
-    fontWeight: 600,
-  },
+  face_recognized:    { label: "Face Recognized",   color: "#818cf8", icon: "👤" },
+  situation_grounding:{ label: "Grounding",          color: "#34d399", icon: "🏠" },
+  activity_continuity:{ label: "Activity Reminder",  color: "#fbbf24", icon: "🔄" },
+  wandering_detected: { label: "Wandering Alert",    color: "#f87171", icon: "⚠️" },
+  conversation_assist:{ label: "Conversation Assist",color: "#a78bfa", icon: "💬" },
+  montage_ready:      { label: "Montage Ready",      color: "#60a5fa", icon: "🎬" },
+  confusion_checkin:  { label: "Check-In",           color: "#34d399", icon: "💭" },
+  task_reminder:      { label: "Task Reminder",      color: "#fbbf24", icon: "📋" },
+  task_completed:     { label: "Task Complete",      color: "#4ade80", icon: "✅" },
 };
 
 function formatTime(iso) {
@@ -65,20 +20,57 @@ function EventCard({ event, onPlayMontage }) {
   const message = event.whisper || event.message || "";
 
   return (
-    <div style={styles.card(cfg.color)}>
-      <div style={styles.row}>
-        <span>{cfg.icon}</span>
-        <span style={styles.badge(cfg.color)}>{cfg.label}</span>
-        {event.person && <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>— {event.person}</span>}
-        <span style={styles.time}>{formatTime(event.timestamp)}</span>
+    <div
+      className="rounded-xl p-3.5"
+      style={{
+        background: "var(--card)",
+        border: `1px solid ${cfg.color}22`,
+        borderLeft: `3px solid ${cfg.color}`,
+      }}
+    >
+      {/* Row: icon + badge + person + time */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-sm leading-none">{cfg.icon}</span>
+        <span
+          className="text-[11px] font-bold uppercase tracking-wider"
+          style={{ color: cfg.color }}
+        >
+          {cfg.label}
+        </span>
+        {event.person && (
+          <span className="text-[12px] font-semibold text-foreground">— {event.person}</span>
+        )}
+        <span className="text-[10px] text-muted-foreground ml-auto tabular-nums">
+          {formatTime(event.timestamp)}
+        </span>
       </div>
-      {message && <p style={styles.message}>"{message}"</p>}
-      {event.scene && <p style={styles.detail}>Scene: {event.scene}</p>}
-      {event.activity && <p style={styles.detail}>Activity: {event.activity}</p>}
-      {event.confidence && <p style={styles.detail}>Confidence: {(event.confidence * 100).toFixed(1)}%</p>}
+
+      {/* Message */}
+      {message && (
+        <p className="text-[13px] leading-relaxed text-foreground/80">"{message}"</p>
+      )}
+
+      {/* Details */}
+      {event.scene && (
+        <p className="text-[11px] text-muted-foreground mt-1">Scene: {event.scene}</p>
+      )}
+      {event.activity && (
+        <p className="text-[11px] text-muted-foreground mt-1">Activity: {event.activity}</p>
+      )}
+      {event.confidence && (
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Confidence: {(event.confidence * 100).toFixed(1)}%
+        </p>
+      )}
+
+      {/* Play montage button */}
       {event.type === "montage_ready" && event.montage_url && (
-        <button style={styles.playBtn} onClick={() => onPlayMontage?.(event)}>
-          Play Montage
+        <button
+          className="mt-2 px-3 py-1 text-[11px] font-semibold rounded-md cursor-pointer border-none transition-opacity hover:opacity-80"
+          style={{ background: "rgba(96,165,250,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.25)" }}
+          onClick={() => onPlayMontage?.(event)}
+        >
+          ▶ Play Montage
         </button>
       )}
     </div>
@@ -87,10 +79,15 @@ function EventCard({ event, onPlayMontage }) {
 
 export default function EventFeed({ events, onPlayMontage }) {
   if (!events.length) {
-    return <div style={styles.empty}>No events yet. Start capture to begin.</div>;
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground text-[14px]">
+        No events yet — start capture to begin.
+      </div>
+    );
   }
+
   return (
-    <div style={styles.container}>
+    <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-2.5">
       {events.map((e, i) => (
         <EventCard key={i} event={e} onPlayMontage={onPlayMontage} />
       ))}
