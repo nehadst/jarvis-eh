@@ -1,4 +1,4 @@
-#  WINNING Submission for Hack Canada 2026 | Jarvis Eh? The Meta Glasses AI Agent for People with Dementia
+#  WINNING Submission for Hack Canada 2026 🎉 | Jarvis Eh? The Meta Glasses AI Agent for People with Dementia
 > *Built on Meta glasses. Sees what you see. Helps you navigate life.*
 
 A real-time AI companion that runs on Meta glasses and a phone/laptop backend to assist people with dementia — providing face recognition, situation grounding, activity continuity, wandering detection, and conversation support.
